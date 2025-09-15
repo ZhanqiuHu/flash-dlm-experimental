@@ -1,0 +1,25 @@
+# ignore __pycache__
+__pycache__/
+
+# ignore .DS_Store
+.DS_Store
+
+# Experiment results and logs
+results/
+wandb/
+*.log
+
+# Model checkpoints and cache
+*.pt
+*.pth
+*.bin
+*.safetensors
+
+# Jupyter notebooks
+*.ipynb_checkpoints/
+
+# Environment files
+.env
+.venv/
+env/
+venv/
