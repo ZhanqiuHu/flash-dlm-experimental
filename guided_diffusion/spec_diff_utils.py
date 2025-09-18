@@ -1106,7 +1106,7 @@ def speculative_block_diffusion_generate(
                             max_length=max_len,
                             block_size=block_size,
                             save_cache=True,
-                            clean_idx=prompt_len if not use_sliding_window_caching else None) 
+                            clean_idx=prompt_len if not config.sliding_window_caching else sliding_window_start) 
             # Logits has shape [1, max_len, vocab_size]
             logits = torch.cat([out.logits[:, :1], out.logits[:, :-1]], 1)
             mask_pos = (seq[0] == mask_id).nonzero(as_tuple=True)[0]
@@ -1167,6 +1167,9 @@ def speculative_block_diffusion_generate(
                 
                 # Convert gen_mask_pos back to full sequence positions for updating
                 mask_pos = gen_mask_pos + sliding_window_start
+
+
+
             else:
                 # Original behavior: start from prompt_len
                 gen_seq = seq[:, prompt_len:]  # Only the generation part
