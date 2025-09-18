@@ -63,9 +63,6 @@ def top_k_logits(logits, top_k=None):
 def sample_tokens(logits, temperature=0.0, top_p=None, 
     top_k=None, margin_confidence=False, neg_entropy=False, return_probs=False):
 
-    # Zhanqiu modified to fix float16 issue: change dtype to float64
-    logits = logits.to(torch.float32)
-
     if temperature > 0:
         logits = logits / temperature
     if top_p is not None and top_p < 1:
@@ -73,11 +70,16 @@ def sample_tokens(logits, temperature=0.0, top_p=None,
     if top_k is not None:
         logits = top_k_logits(logits, top_k)
     probs = torch.softmax(logits, dim=-1)
+    
+    # print logits shape and probs shape
+    # logits.shape, probs.shape
+    # logits.max(), probs.max()
 
     if temperature > 0:
         try:
             x0 = dists.Categorical(probs=probs).sample()
             confidence = torch.gather(probs, -1, x0.unsqueeze(-1)).squeeze(-1)
+            
         except:
             confidence, x0 = probs.max(dim=-1)
     else:
@@ -92,14 +94,19 @@ def sample_tokens(logits, temperature=0.0, top_p=None,
         confidence = top1_probs - top2_probs 
     
     if neg_entropy:
+        # print(f"probs: {probs}", flush=True)
+        
         epsilon = 1e-10
-        # Zhanqiu modified to fix float16 issue: set bigger epsilon
+        # issue: set bigger epsilon
         # epsilon = 1e-4
         log_probs = torch.log(probs + epsilon)
+        
         confidence = torch.sum(probs * log_probs, dim=-1)
+        
     
     if return_probs:
         return confidence, x0, probs
+    
     
     return confidence, x0
 
@@ -148,7 +155,39 @@ class DreamGenerationConfig(GenerationConfig):
 
         # NEW: sliding window caching parameters
         self.sliding_window_caching: bool = kwargs.pop("sliding_window_caching", False)
-        self.sliding_window_size: int = kwargs.pop("sliding_window_size", 128)
+        sliding_window_size = kwargs.pop("sliding_window_size", 128)
+        
+        # Parse sliding window size: support both single number and tuple
+        if isinstance(sliding_window_size, (list, tuple)):
+            if len(sliding_window_size) != 2:
+                raise ValueError(f"sliding_window_size tuple must have exactly 2 elements, got {len(sliding_window_size)}")
+            left_size, right_size = sliding_window_size
+            # Convert to int if they're strings
+            if isinstance(left_size, str):
+                left_size = int(left_size)
+            if isinstance(right_size, str):
+                right_size = int(right_size)
+            self.left_window_size, self.right_window_size = left_size, right_size
+        elif isinstance(sliding_window_size, str) and sliding_window_size.startswith('(') and sliding_window_size.endswith(')'):
+            # Handle string representation of tuple like "(256, 256)"
+            try:
+                # Remove parentheses and split by comma
+                content = sliding_window_size[1:-1]  # Remove ( and )
+                parts = [part.strip() for part in content.split(',')]
+                if len(parts) != 2:
+                    raise ValueError(f"sliding_window_size tuple must have exactly 2 elements, got {len(parts)}")
+                self.left_window_size, self.right_window_size = int(parts[0]), int(parts[1])
+            except (ValueError, IndexError) as e:
+                raise ValueError(f"Invalid sliding_window_size format: {sliding_window_size}") from e
+        else:
+            # Single number: symmetric window
+            # Ensure it's converted to int if it's a string
+            if isinstance(sliding_window_size, str):
+                sliding_window_size = int(sliding_window_size)
+            self.left_window_size = self.right_window_size = sliding_window_size
+        
+        # Keep original for backward compatibility
+        self.sliding_window_size = sliding_window_size
 
         # NEW: attention weights saving parameters
         self.save_attention_weights: bool = kwargs.pop("save_attention_weights", False)
@@ -346,6 +385,7 @@ class DreamGenerationMixin:
         generation_config: Optional[DreamGenerationConfig] = None,
         **kwargs,
     ) -> Union[DreamModelOutput, torch.LongTensor]:
+        # print(f"In diffusion_generate()", flush=True)
         # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
         generation_config = self._prepare_generation_config(generation_config, **kwargs)
         generation_tokens_hook_func = kwargs.pop("generation_tokens_hook_func", lambda step, x, logits: x)
@@ -427,9 +467,12 @@ class DreamGenerationMixin:
             #     self.model.layers[layer_idx].reset_block_cache(bsz, L, block_size)
             self.cache_initialized = True
         else:
+            # import pdb;pdb.set_trace()
             print("Not using block diffusion")
             self.cache_initialized = False
 
+        # insert the debug breakpoint here
+         
 
         result = self._sample(
             input_ids,
@@ -448,6 +491,7 @@ class DreamGenerationMixin:
         generation_tokens_hook_func,
         generation_logits_hook_func
     ) -> Union[DreamModelOutput, torch.LongTensor]:
+        # print(f"In _sample()", flush=True)
         # Common initialization
         output_history = generation_config.output_history
         return_dict_in_generate = generation_config.return_dict_in_generate
@@ -472,7 +516,10 @@ class DreamGenerationMixin:
             tok_idx = None
             attention_mask = "full"
 
+        # insert the debug breakpoint here
+        
         if generation_config.use_block_diffusion:
+            # print("Using block diffusion sampling", flush=True)
             GREEN = "\033[92m"
             RESET = "\033[0m"
             print(f"{GREEN}Using block diffusion sampling{RESET}", flush=True)
@@ -491,6 +538,7 @@ class DreamGenerationMixin:
             #     histories
             # )
         else:
+            # print("Using baseline sampling", flush=True)
             sequences = self._sample_baseline(
                 x, attention_mask, tok_idx,
                 generation_config,
@@ -515,10 +563,14 @@ class DreamGenerationMixin:
         generation_logits_hook_func,
         histories
         ):
+        # print(f"In _sample_block_diffusion()", flush=True)
 
         BLUE = "\033[94m"   
         RESET = "\033[0m"
-        print(f"Inside dream-flash block diffusion", flush=True)
+        # Debug
+        print(f"Inside Dream-v2 block diffusion", flush=True)
+        # print(f"{BLUE}generation_config: {generation_config}{RESET}", flush=True)
+        # print(f"{BLUE}kwargs: {kwargs}{RESET}", flush=True)
 
         steps, eps, alg, alg_temp, temperature, top_p, top_k, mask_token_id = (
             generation_config.steps,
@@ -601,7 +653,9 @@ class DreamGenerationMixin:
                     # assert length of x_partial_with_room is 2 x block_size
                     
                     # feed in x[:, block_start:]
-                    logits = self(x[:, block_start-1:], None, tok_idx[:, block_start:] if tok_idx is not None else None,
+                    # print out input size
+                    print(f"x[:, block_start-1:block_end].shape: {x[:, block_start-1:block_end].shape}")
+                    logits = self(x[:, block_start-1:block_end], None, tok_idx[:, block_start:block_end] if tok_idx is not None else None,
                                 use_block_diffusion=True,
                                 use_full_query_attn=use_full_query_attn,
                                 max_length=generation_config.max_length,
@@ -615,6 +669,14 @@ class DreamGenerationMixin:
                     logits = logits[:, 1:block_size+1]
                 mask_logits = logits[block_mask_index]
             
+                # TODO: Uncomment this to print out the max prediction
+                # max_prediction = torch.argmax(logits, dim=-1)
+                # print(f"[DEBUG] Max prediction indices: {max_prediction.tolist()}", flush=True)
+                # try:
+                #     decoded = [tokenizer.decode([idx.item()]) for idx in max_prediction[0]]
+                #     print(f"[DEBUG] Decoded max prediction: {''.join(decoded)}", flush=True)
+                # except Exception as e:
+                #     print(f"[DEBUG] Could not decode max prediction: {e}", flush=True)
 
                 t, s = timesteps[i], timesteps[i + 1]
 
@@ -696,6 +758,16 @@ class DreamGenerationMixin:
                     x_partial[block_mask_index] = x0_.clone()
                     x[:, block_start:block_end] = x_partial.clone()
 
+                    # TODO: Print out positions and token IDs of newly unmasked tokens
+                    # with respect to the full sequence x
+                    # newly_unmasked = (x0_ != mask_token_id)
+                    # print(f"transfer_index: {transfer_index}", flush=True)
+                    # newly_unmasked = (x0_ != mask_token_id)
+                    # # print(f"{YELLOW}newly_unmasked: {newly_unmasked}{RESET}", flush=True)
+                    # if newly_unmasked.any():
+                    #     unmasked_positions = torch.nonzero(newly_unmasked).squeeze(-1) + block_start
+                    #     unmasked_tokens = x0_[newly_unmasked]
+                    #     print(f"{YELLOW}Step {step_idx}: Unmasked tokens at positions {unmasked_positions.tolist()} with token IDs {unmasked_tokens.tolist()}{RESET}", flush=True)
 
                     if generation_config.early_stop:
                         last_pos = torch.nonzero(block_mask_index)[transfer_index].max().item()
@@ -732,6 +804,8 @@ class DreamGenerationMixin:
         # Condition 0: last clean token must be EOS
         if last_clean_token != eos_token_id:
             return False
+        # print(f"last_clean_token: {last_clean_token}", flush=True)
+        # print(f"last_clean_token_position: {last_clean_token_position}", flush=True)
 
         # Only support batch_size=1
         x_seq = x[0, :last_clean_token_position + 1]  # Up to last clean token
@@ -872,9 +946,14 @@ class DreamGenerationMixin:
             else:
                 raise RuntimeError(f"Unknown alg: {alg}")
 
+            
+            # insert the debug breakpoint if confidence is **not** all nan
             if torch.isnan(confidence).any():
                 print("⚠️ Some confidence values are NaN")
-                import pdb; pdb.set_trace()
+                
+            else:
+                # print(f"✅ Confidence valid! Min: {confidence.min().item()}, Max: {confidence.max().item()}")
+                pass
 
             if enable_confidence_based:
                 # --------- Confidence-based adaptive unmasking ----------
@@ -923,6 +1002,8 @@ class DreamGenerationMixin:
                     max_scan_tokens = generation_config.decay_params.get("max_scan_tokens", 10)
                     confidence_threshold = generation_config.decay_params.get("confidence_threshold", 0.999)
 
+                    # print out top 5 confidence values
+                    # print(f"Top 5 confidence values: {torch.topk(confidence, k=5)}")
 
                     num_to_scan = min(max_scan_tokens, len(confidence))
                     group = []
@@ -1007,6 +1088,7 @@ class DreamGenerationMixin:
                     break
 
             i += 1  # Normal step increment
+        # print(f"num_confidents_dict: {num_confidents_dict}", flush=True)
         if generation_config.confidence_based_adaptive_unmasking:
             print(f"num_confidents_dict: {num_confidents_dict}", flush=True)
         return x
@@ -1018,10 +1100,14 @@ class DreamGenerationMixin:
         generation_logits_hook_func,
         histories
     ):
+        # print(f"In _sample_block_diffusion()", flush=True)
 
         BLUE = "\033[94m"   
         RESET = "\033[0m"
-        print(f"Inside dream-flash block diffusion v2", flush=True)
+        # Debug
+        print(f"Inside Dream-v2 block diffusion v2", flush=True)
+        # print(f"{BLUE}generation_config: {generation_config}{RESET}", flush=True)
+        # print(f"{BLUE}kwargs: {kwargs}{RESET}", flush=True)
 
         steps, eps, alg, alg_temp, temperature, top_p, top_k, mask_token_id = (
             generation_config.steps,
@@ -1039,7 +1125,8 @@ class DreamGenerationMixin:
 
         # add a flag to use sliding window caching
         sliding_window_caching = generation_config.sliding_window_caching
-        sliding_window_size = generation_config.sliding_window_size
+        left_window_size = generation_config.left_window_size
+        right_window_size = generation_config.right_window_size
 
         prompt_len = (x != mask_token_id).sum(dim=-1).max().item()
 
@@ -1060,7 +1147,7 @@ class DreamGenerationMixin:
         if sliding_window_caching:
             BLUE = "\033[94m"   
             RESET = "\033[0m"
-            print(f"{BLUE}Using sliding window caching with size {sliding_window_size}{RESET}", flush=True)
+            print(f"{BLUE}Using sliding window caching with left size {left_window_size} and right size {right_window_size}{RESET}", flush=True)
 
 
         # NEW FEATURE: early stopping
@@ -1077,8 +1164,8 @@ class DreamGenerationMixin:
                 masked_tok_positions = torch.nonzero(x == mask_token_id, as_tuple=False).squeeze(-1)
                 # find the first masked token 
                 first_masked_tok_pos = masked_tok_positions[0].item()
-                sliding_window_start = max(0, first_masked_tok_pos-sliding_window_size)
-                # sliding_window_end = min(L, first_masked_tok_pos+sliding_window_size)
+                sliding_window_start = max(0, first_masked_tok_pos-left_window_size)
+                # sliding_window_end = min(L, first_masked_tok_pos+right_window_size)
                 sliding_window_end = L # Do end of sequence for now
 
                 x_curr_block = x[:, sliding_window_start:sliding_window_end]
@@ -1518,7 +1605,8 @@ class DreamGenerationMixin:
         eos_id = generation_config.eos_token_id
 
         sliding = generation_config.sliding_window_caching
-        window = generation_config.sliding_window_size
+        left_window = generation_config.left_window_size
+        right_window = generation_config.right_window_size
         block = generation_config.block_size
         max_new = generation_config.max_new_tokens
         max_len = generation_config.max_length
@@ -1534,7 +1622,7 @@ class DreamGenerationMixin:
             while (x == mask_id).any():
                 # window bounds
                 first = torch.nonzero(x == mask_id)[0,1].item()
-                start = max(0, first - window)
+                start = max(0, first - left_window)
                 seq = x[:, start:]
                 tok = tok_idx[:, start:] if tok_idx is not None else None
 

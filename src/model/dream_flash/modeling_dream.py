@@ -355,6 +355,7 @@ class DreamSdpaAttention(DreamAttention):
             device=self.q_proj.weight.device,  # Get device from model parameter
             dtype=self.q_proj.weight.dtype  # Get dtype from model parameter
         )
+        self.max_length = max_length
 
     def forward(
         self,
@@ -406,6 +407,7 @@ class DreamSdpaAttention(DreamAttention):
 
 
         if qkv_cache is not None:
+            # print("Update cache, layer idx: ", self.layer_idx)
             assert use_block_diffusion is not None, "use_block_diffusion must be provided"
             assert block_size is not None, "block_size must be provided"
             assert use_full_query_attn is not None, "use_full_query_attn must be provided"
@@ -418,6 +420,8 @@ class DreamSdpaAttention(DreamAttention):
 
 
             qkv_cache.update_cache(new_q, new_k, new_v, new_cos_pos_emb, new_sin_pos_emb)
+            block_start = qkv_cache.clean_cache_idx
+            block_end = qkv_cache.next_cache_idx
             if save_cache:
                 qkv_cache.save_cache(clean_idx=clean_idx)
             
@@ -428,19 +432,30 @@ class DreamSdpaAttention(DreamAttention):
             # value_states: [bsz, clean_tokens + block_size, num_key_value_heads * head_dim] at denoising step
 
             if not use_full_query_attn:
+                # print("Using partial query attention")
                 query_states = new_q # [bsz, block_size, num_heads * head_dim] at denoising step
             else:
+                # print("Using full query attention")
                 # use full query attention
                 new_cos_pos_emb, new_sin_pos_emb = cos_pos_emb, sin_pos_emb
 
+            # set check point
+            # if self.layer_idx == 0:
+            #     import pdb; pdb.set_trace()
 
             # TODO: cache and update position_embeddings to include up to current block
             position_embeddings = (cos_pos_emb, sin_pos_emb)
 
+            # print(f"q shape: {query_states.shape}")
+            # print(f"k shape: {key_states.shape}")
+            # print(f"v shape: {value_states.shape}")
+            # print(f"cos_pos_emb shape: {cos_pos_emb.shape}")
+            # print(f"sin_pos_emb shape: {sin_pos_emb.shape}")
 
 
 
         else:
+            # print("No KV cache")
             query_states = self.q_proj(hidden_states)
             key_states = self.k_proj(hidden_states)
             value_states = self.v_proj(hidden_states)
@@ -451,6 +466,9 @@ class DreamSdpaAttention(DreamAttention):
         q_len = query_states.shape[1]
         kv_len = key_states.shape[1]
 
+        # print(f"q shape: {query_states.shape}")
+        # print(f"k shape: {key_states.shape}")
+        # print(f"v shape: {value_states.shape}")
 
 
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
@@ -492,6 +510,9 @@ class DreamSdpaAttention(DreamAttention):
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
+        # print(f"query_states shape: {query_states.shape}")
+        # print(f"key_states shape: {key_states.shape}")
+        # print(f"value_states shape: {value_states.shape}")
 
         if query_states.device.type == "cuda" and attention_mask is not None:
             query_states = query_states.contiguous()
@@ -504,6 +525,10 @@ class DreamSdpaAttention(DreamAttention):
         key_states = key_states.to(dtype=dtype)
         value_states = value_states.to(dtype=dtype)
 
+        # print out shape of query_states, key_states, value_states
+        # print(f"query_states shape: {query_states.shape}")
+        # print(f"key_states shape: {key_states.shape}")
+        # print(f"value_states shape: {value_states.shape}")
 
         # Compute attention weights if output_attentions is True
         attn_weights = None
@@ -515,6 +540,8 @@ class DreamSdpaAttention(DreamAttention):
             attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
             attn_output = torch.matmul(attn_weights, value_states)
         else:
+            assert key_states.shape[2] == self.max_length, f"key_states {key_states.shape} should be full length {self.max_length}"
+            assert value_states.shape[2] == self.max_length, f"value_states {value_states.shape[1]} should be full length {self.max_length}"
             attn_output = torch.nn.functional.scaled_dot_product_attention(
                 query_states,
                 key_states,
@@ -525,6 +552,9 @@ class DreamSdpaAttention(DreamAttention):
             )
 
         # cut off attn_output to be the last q_len_in tokens
+        # print(f"attn_output shape: {attn_output.shape}")
+        # attn_output = attn_output[:, :, -q_len_in:]
+        assert q_len_in == attn_output.shape[2], f"q_len_in {q_len_in} should be equal to attn_output.shape[2] {attn_output.shape[2]}"
         attn_output = attn_output[:, :, -q_len_in:]
 
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -866,6 +896,8 @@ class DreamBaseModel(DreamPreTrainedModel):
 
             # Dont use cache_position for now
 
+        # insert debug breakpoint here
+        # import pdb; pdb.set_trace()
 
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)

@@ -34,6 +34,12 @@ class BlockCache(torch.nn.Module):
     def update_cache(self, new_q, new_k, new_v, new_cos_pos_emb, new_sin_pos_emb):
         start = self.clean_cache_idx
         end = start + new_q.shape[1]
+        # print out new_q.shape[1]
+        # print(f"update_cache: new_q.shape: {new_q.shape}")
+        # print(f"update_cache: new_k.shape: {new_k.shape}")
+        # print(f"update_cache: new_v.shape: {new_v.shape}")
+        # # self.key_cache[:, start:end] = new_k
+        # print(f"start: {start}, end: {end}")
 
         # Move inputs to correct device and dtype if needed
         new_k = new_k.to(device=self.device, dtype=self.dtype)
@@ -50,15 +56,22 @@ class BlockCache(torch.nn.Module):
         
         self.next_cache_idx = end
 
+        # insert debug breakpoint here
+        # import pdb; pdb.set_trace()
     
     def get_cache(self):
         # up to the next_cache_idx
         # return the q, k, v up to the next_cache_idx
-        q = self.query_cache[:, :self.next_cache_idx]
-        k = self.key_cache[:, :self.next_cache_idx]
-        v = self.value_cache[:, :self.next_cache_idx]
-        cos_pos_emb = self.cos_pos_emb[:, :self.next_cache_idx]
-        sin_pos_emb = self.sin_pos_emb[:, :self.next_cache_idx]
+        # q = self.query_cache[:, :self.next_cache_idx]
+        # k = self.key_cache[:, :self.next_cache_idx]
+        # v = self.value_cache[:, :self.next_cache_idx]
+        # cos_pos_emb = self.cos_pos_emb[:, :self.next_cache_idx]
+        # sin_pos_emb = self.sin_pos_emb[:, :self.next_cache_idx]
+        q = self.query_cache[:, :self.max_length]
+        k = self.key_cache[:, :self.max_length]
+        v = self.value_cache[:, :self.max_length]
+        cos_pos_emb = self.cos_pos_emb[:, :self.max_length]
+        sin_pos_emb = self.sin_pos_emb[:, :self.max_length]
         return q, k, v, cos_pos_emb, sin_pos_emb
     
     def save_cache(self, clean_idx=None):
