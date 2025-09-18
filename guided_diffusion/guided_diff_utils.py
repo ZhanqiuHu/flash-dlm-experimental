@@ -518,43 +518,8 @@ class ARAssistant:
             relative_threshold: Accept if token's prob is within this ratio of top prob
                                e.g., 0.5 means accept if prob >= 0.5 * top_prob
         """
-        # Get top-k probabilities and indices for each position
-        topk_probs, topk_ids = probs_blk.topk(top_k, dim=-1)  # [batch_size, top_k]
-        
-        # Get probabilities of draft tokens
-        draft_probs = torch.gather(probs_blk[:q_chunk[0].size(0)], 1, q_chunk[0].unsqueeze(1))  # [batch_size, 1]
-        
-        # Create mask for tokens in top-k
-        in_topk = (q_chunk[0].unsqueeze(1) == topk_ids[:q_chunk[0].size(0)]).any(dim=1)  # [batch_size]
-        
-        # Create mask for tokens meeting relative threshold
-        meets_threshold = draft_probs.squeeze(1) >= relative_threshold * topk_probs[:q_chunk[0].size(0), 0]  # [batch_size]
-        
-        # Combine masks
-        accept_mask = in_topk & meets_threshold  # [batch_size]
-        
-        # Find first rejection
-        first_reject = (~accept_mask).nonzero()
-        if len(first_reject) > 0:
-            accept_len = first_reject[0].item()
-        else:
-            accept_len = len(accept_mask)
-        
-        # Vectorized token selection
-        # Create a tensor of selected tokens where:
-        # - For accepted positions: use draft tokens
-        # - For rejected positions: use top token
-        selected_tokens = torch.where(
-            accept_mask.unsqueeze(1),
-            q_chunk[0, :accept_mask.size(0)].unsqueeze(1),
-            topk_ids[:accept_mask.size(0), 0].unsqueeze(1)
-        ).squeeze(1)
-        
-        # Convert to Dream tokens and take only up to accept_len
-        chosen_dream = [
-            self.token_mapper.qwen_to_dream_id(t.item())
-            for t in selected_tokens[:accept_len + 1]  # +1 to include the rejection token
-        ]
+        # TODO: Implement this
+        raise NotImplementedError("Vectorized top-k relative verification strategy is not implemented")
         
         return chosen_dream, accept_len
 
@@ -569,7 +534,7 @@ class ARAssistant:
         sampling_strategy: str = "deterministic",  # Use string-based strategy selection
         confidence_threshold: float = 0.1,  # Fixed confidence threshold
         acceptance_top_k: int = 5,  # Add top-k parameter
-        top_p: float = 0.95,  # Add top-p parameter
+        top_p: float = 0.95,  # Add top-p parameter # TODO: rename this hyperparameter for better clarity (confusing when used as relative_threshold)
     ) -> List[int]:
         """
         Verify `draft_ids` in contiguous chunks of `batch_size`.
@@ -857,6 +822,34 @@ def assisted_block_diffusion_generate(
     print(f"DEBUG: use_sliding_window_caching = {use_sliding_window_caching}")
     print(f"DEBUG: config.use_sliding_window_caching = {getattr(config, 'use_sliding_window_caching', 'NOT_FOUND')}")
     sliding_window_size = getattr(config, 'sliding_window_size', 128)
+    
+    # Parse sliding window size: support both single number and tuple
+    if isinstance(sliding_window_size, (list, tuple)):
+        if len(sliding_window_size) != 2:
+            raise ValueError(f"sliding_window_size tuple must have exactly 2 elements, got {len(sliding_window_size)}")
+        left_window_size, right_window_size = sliding_window_size
+        # Convert to int if they're strings
+        if isinstance(left_window_size, str):
+            left_window_size = int(left_window_size)
+        if isinstance(right_window_size, str):
+            right_window_size = int(right_window_size)
+    elif isinstance(sliding_window_size, str) and sliding_window_size.startswith('(') and sliding_window_size.endswith(')'):
+        # Handle string representation of tuple like "(256, 256)"
+        try:
+            # Remove parentheses and split by comma
+            content = sliding_window_size[1:-1]  # Remove ( and )
+            parts = [part.strip() for part in content.split(',')]
+            if len(parts) != 2:
+                raise ValueError(f"sliding_window_size tuple must have exactly 2 elements, got {len(parts)}")
+            left_window_size, right_window_size = int(parts[0]), int(parts[1])
+        except (ValueError, IndexError) as e:
+            raise ValueError(f"Invalid sliding_window_size format: {sliding_window_size}") from e
+    else:
+        # Single number: symmetric window
+        # Ensure it's converted to int if it's a string
+        if isinstance(sliding_window_size, str):
+            sliding_window_size = int(sliding_window_size)
+        left_window_size = right_window_size = sliding_window_size
 
     while (seq == mask_id).any():
         logger.debug("================================================")
@@ -864,9 +857,9 @@ def assisted_block_diffusion_generate(
         verification_stats['total_steps'] += 1
 
         # Start timing for this step
-        # compute sliding window start index
-        sliding_window_start = max(0, last_non_mask-sliding_window_size)
-        sliding_window_end = min(max_len, last_non_mask+sliding_window_size)
+        # compute sliding window start index with left and right window sizes
+        sliding_window_start = max(0, last_non_mask - left_window_size)
+        sliding_window_end = min(max_len, last_non_mask + right_window_size)
         
         # Dream forward (draft) with block caching
         diffusion_start_time = time.perf_counter()
@@ -904,82 +897,7 @@ def assisted_block_diffusion_generate(
             
             drafts = logits[0, mask_pos, :].argmax(-1)
         else:
-            if use_block_boundary_caching:
-                # GREEN = '\033[1;32m'
-                # BOLD = '\033[1m'
-                # RESET = '\033[0m'
-                # print(f"{GREEN}{BOLD}Using block boundary caching{RESET}")    
-                # Calculate last clean block boundary
-                last_clean_block = ((last_non_mask + 1) // block_size) * block_size
-                
-                # Start from last clean block
-                gen_seq = seq[:, last_clean_block:]  # Only the generation part from last clean block
-                gen_tok_idx = tok_idx[:, last_clean_block:] if tok_idx is not None else None
-                
-                # Dream model forward pass timing
-                dream_forward_start_time = time.perf_counter()
-                out = dream_model(gen_seq, None, gen_tok_idx,
-                                use_block_diffusion=True,
-                                use_full_query_attn=False,
-                                max_length=max_len,
-                                block_size=block_size,
-                                save_cache=True,
-                                clean_idx=last_clean_block + 1)  # Save cache up to last clean block
-                dream_forward_end_time = time.perf_counter()
-                dream_forward_time = (dream_forward_end_time - dream_forward_start_time) * 1000  # Convert to ms
-                
-                # Logits has shape [1, remaining_len, vocab_size]
-                logits = torch.cat([out.logits[:, :1], out.logits[:, :-1]], 1)
-                # OLD: gen_mask_pos = (gen_seq[0] == mask_id).nonzero(as_tuple=True)[0]
-                # Get mask positions relative to the generation part (optimized)
-                first_mask = (gen_seq[0] == mask_id).nonzero(as_tuple=True)[0]
-                if len(first_mask) > 0:
-                    start_pos = first_mask[0]
-                    remaining_seq = gen_seq[0, start_pos:]
-                    relative_mask_pos = (remaining_seq == mask_id).nonzero(as_tuple=True)[0]
-                    gen_mask_pos = relative_mask_pos + start_pos
-                else:
-                    gen_mask_pos = torch.tensor([], dtype=torch.long, device=gen_seq.device)
-                drafts = logits[0, gen_mask_pos, :].argmax(-1)
-                
-                # Convert gen_mask_pos back to full sequence positions for updating
-                mask_pos = gen_mask_pos + last_clean_block
-
-                
-            elif aggressive_caching:
-                # Start from last clean token
-                gen_seq = seq[:, last_non_mask:]  # Only the generation part from last clean token
-                gen_tok_idx = tok_idx[:, last_non_mask:] if tok_idx is not None else None
-                
-                # Dream model forward pass timing
-                dream_forward_start_time = time.perf_counter()
-                out = dream_model(gen_seq, None, gen_tok_idx,
-                                use_block_diffusion=True,
-                                use_full_query_attn=False,
-                                max_length=max_len,
-                                block_size=block_size,
-                                save_cache=True,
-                                clean_idx=last_non_mask + 1)  # Save cache up to last clean token
-                dream_forward_end_time = time.perf_counter()
-                dream_forward_time = (dream_forward_end_time - dream_forward_start_time) * 1000  # Convert to ms
-                
-                # Logits has shape [1, remaining_len, vocab_size]
-                logits = torch.cat([out.logits[:, :1], out.logits[:, :-1]], 1)
-                # OLD: gen_mask_pos = (gen_seq[0] == mask_id).nonzero(as_tuple=True)[0]
-                # Get mask positions relative to the generation part (optimized)
-                first_mask = (gen_seq[0] == mask_id).nonzero(as_tuple=True)[0]
-                if len(first_mask) > 0:
-                    start_pos = first_mask[0]
-                    remaining_seq = gen_seq[0, start_pos:]
-                    relative_mask_pos = (remaining_seq == mask_id).nonzero(as_tuple=True)[0]
-                    gen_mask_pos = relative_mask_pos + start_pos
-                else:
-                    gen_mask_pos = torch.tensor([], dtype=torch.long, device=gen_seq.device)
-                drafts = logits[0, gen_mask_pos, :].argmax(-1)
-                
-                # Convert gen_mask_pos back to full sequence positions for updating
-                mask_pos = gen_mask_pos + last_non_mask
-            elif use_sliding_window_caching:
+            if use_sliding_window_caching:
                 gen_seq = seq[:, sliding_window_start:sliding_window_end]
                 gen_tok_idx = tok_idx[:, sliding_window_start:sliding_window_end] if tok_idx is not None else None
                 
@@ -1014,8 +932,6 @@ def assisted_block_diffusion_generate(
 
                 # Convert gen_mask_pos back to full sequence positions for updating
                 mask_pos = gen_mask_pos + sliding_window_start
-                
-                
             else:
                 # Original behavior: start from prompt_len
                 gen_seq = seq[:, prompt_len:]  # Only the generation part

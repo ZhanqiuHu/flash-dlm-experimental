@@ -378,9 +378,9 @@ class BaseGuidedEvaluator:
 
             # Print colored output for prediction
             if not corr:
-                print(f"{RED}❌  Pred: {BOLD}{pred}{RESET}{RED} != Gold: {BOLD}{gold}{RESET}\n")
+                print(f"{RED}❌  Pred: {BOLD}{txt}{RESET}{RED} != Gold: {BOLD}{gold}{RESET}\n")
             else:
-                print(f"{GREEN}✅  Pred: {BOLD}{pred}{RESET}{GREEN} == Gold: {BOLD}{gold}{RESET}")
+                print(f"{GREEN}✅  Pred: {BOLD}{txt}{RESET}{GREEN} == Gold: {BOLD}{gold}{RESET}")
 
             # log
             time_breakdown = verification_stats.get('time_breakdown', {}) if verification_stats else {}

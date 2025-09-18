@@ -1,0 +1,65 @@
+# Guided Diffusion: Dream-v2 + Qwen2.5-1.5B on GSM8K (Subsampled)
+
+wandb:
+  project_name: dream-guided-diffusion-rebuttal
+  experiment_name: gsm8k-dream-v2-qwen2.5-1.5b-guided-diffusion-subsample
+  flag: true
+
+model:
+  # autoregressive "verifier" (target) model
+  model_type: Qwen/Qwen2.5-1.5B
+  # diffusion "proposer" (draft) model
+  draft_model: Dream-org/Dream-Flash-Instruct-7B
+
+dataset:
+  name: "gsm8k"
+  train: "./dataset/gsm8k/inference/train.jsonl"
+  test:  "./dataset/gsm8k/inference/gsm8k_test.jsonl"
+  split: "test"
+  prm: false
+  nshot: 8
+  apply_chat_template: true
+
+save:
+  run_dir: results/rebuttal/gsm8k/guided_diffusion/dream_v2_qwen2.5_1.5b_guided_diffusion_100samples
+  logger: evaluation.log
+
+eval:
+  cot: true
+  max_gen_toks: 1024
+  max_samples: 0  # Randomly sample 100 examples for testing
+  subsample_seed: 42  # Seed for reproducible random sampling
+
+train:
+  batch_size: 1
+
+dream:
+  # diffusion hyperparameters for the draft model
+  steps: 1024
+  eps: 1e-3
+
+  # block diffusion for performance
+  use_block_diffusion: true
+  block_size: 64 # Not really used with guided diffusion + sliding window
+  use_full_query_attn: false
+
+  use_sliding_window_caching: true
+  sliding_window_size: (256, 256)
+
+  # early stopping on EOS
+  early_stop: true
+  early_stop_consecutive: 1
+
+  # verification strategy
+  # example 1
+  # sampling_strategy: "deterministic"
+
+  # example 2
+  sampling_strategy: "topk_relative"
+  acceptance_top_k: 2
+  top_p: 0.5 
+
+  verify_batch_size: 32
+
+  # Enable assisted decoding mode
+  use_assisted: true

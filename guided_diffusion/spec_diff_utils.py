@@ -71,7 +71,39 @@ class SpecDiffusionConfig(GenerationConfig):
 
         # sliding window caching
         self.sliding_window_caching = kw.pop("sliding_window_caching", False)  # Default to False
-        self.sliding_window_size    = kw.pop("sliding_window_size", 128)
+        sliding_window_size = kw.pop("sliding_window_size", 128)
+        
+        # Parse sliding window size: support both single number and tuple
+        if isinstance(sliding_window_size, (list, tuple)):
+            if len(sliding_window_size) != 2:
+                raise ValueError(f"sliding_window_size tuple must have exactly 2 elements, got {len(sliding_window_size)}")
+            left_size, right_size = sliding_window_size
+            # Convert to int if they're strings
+            if isinstance(left_size, str):
+                left_size = int(left_size)
+            if isinstance(right_size, str):
+                right_size = int(right_size)
+            self.left_window_size, self.right_window_size = left_size, right_size
+        elif isinstance(sliding_window_size, str) and sliding_window_size.startswith('(') and sliding_window_size.endswith(')'):
+            # Handle string representation of tuple like "(256, 256)"
+            try:
+                # Remove parentheses and split by comma
+                content = sliding_window_size[1:-1]  # Remove ( and )
+                parts = [part.strip() for part in content.split(',')]
+                if len(parts) != 2:
+                    raise ValueError(f"sliding_window_size tuple must have exactly 2 elements, got {len(parts)}")
+                self.left_window_size, self.right_window_size = int(parts[0]), int(parts[1])
+            except (ValueError, IndexError) as e:
+                raise ValueError(f"Invalid sliding_window_size format: {sliding_window_size}") from e
+        else:
+            # Single number: symmetric window
+            # Ensure it's converted to int if it's a string
+            if isinstance(sliding_window_size, str):
+                sliding_window_size = int(sliding_window_size)
+            self.left_window_size = self.right_window_size = sliding_window_size
+        
+        # Keep original for backward compatibility
+        self.sliding_window_size = sliding_window_size
 
         # misc
         self.return_dict_in_generate= kw.pop("return_dict_in_generate", False)
@@ -1105,9 +1137,9 @@ def speculative_block_diffusion_generate(
                 # mask_pos = gen_mask_pos + sliding_window_start
 
                 # New version
-                # Calculate sliding window start and end positions
-                sliding_window_start = max(0, last_non_mask - config.sliding_window_size)
-                sliding_window_end = min(max_len, last_non_mask + config.sliding_window_size)
+                # Calculate sliding window start and end positions with left and right window sizes
+                sliding_window_start = max(0, last_non_mask - config.left_window_size)
+                sliding_window_end = min(max_len, last_non_mask + config.right_window_size)
 
                 # Debug: print sliding window with size 
                 # print(f"Using sliding window from {sliding_window_start} to {sliding_window_end} (size={sliding_window_end - sliding_window_start})")
