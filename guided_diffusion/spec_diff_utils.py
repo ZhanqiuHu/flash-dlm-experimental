@@ -58,7 +58,7 @@ class SpecDiffusionConfig(GenerationConfig):
         self.early_stop_consecutive = kw.pop("early_stop_consecutive", 1)
 
         # stop on dream eos
-        self.stop_on_dream_eos      = kw.pop("stop_on_dream_eos", False)  # New flag to stop on Dream model's EOS
+        self.stop_on_dream_eos      = kw.pop("stop_on_dream_eos", True)  # New flag to stop on Dream model's EOS
         print(f"Stop on dream eos: {self.stop_on_dream_eos}")
 
         # verifier batching
@@ -1086,6 +1086,7 @@ def speculative_block_diffusion_generate(
     # Check caching strategies
     aggressive_caching = getattr(config, 'aggressive_caching', False)
     use_block_boundary_caching = getattr(config, 'use_block_boundary_caching', False)
+    use_sliding_window_caching = getattr(config, 'sliding_window_caching', False)
     aggressive_verify = getattr(config, 'aggressive_verify', False)  # Add flag for aggressive verification
 
     while (seq == mask_id).any():
@@ -1105,7 +1106,7 @@ def speculative_block_diffusion_generate(
                             max_length=max_len,
                             block_size=block_size,
                             save_cache=True,
-                            clean_idx=prompt_len) 
+                            clean_idx=prompt_len if not use_sliding_window_caching else None) 
             # Logits has shape [1, max_len, vocab_size]
             logits = torch.cat([out.logits[:, :1], out.logits[:, :-1]], 1)
             mask_pos = (seq[0] == mask_id).nonzero(as_tuple=True)[0]
@@ -1142,7 +1143,7 @@ def speculative_block_diffusion_generate(
                 sliding_window_end = min(max_len, last_non_mask + config.right_window_size)
 
                 # Debug: print sliding window with size 
-                # print(f"Using sliding window from {sliding_window_start} to {sliding_window_end} (size={sliding_window_end - sliding_window_start})")
+                # print(f"Using sliding window from {sliding_window_start} to {sliding_window_end} (left={config.left_window_size}, right={config.right_window_size}, size={sliding_window_end - sliding_window_start})")
                 
                 # Get the generation part from sliding window
                 gen_seq = seq[:, sliding_window_start:sliding_window_end]
@@ -1166,54 +1167,6 @@ def speculative_block_diffusion_generate(
                 
                 # Convert gen_mask_pos back to full sequence positions for updating
                 mask_pos = gen_mask_pos + sliding_window_start
-
-
-
-            elif use_block_boundary_caching:
-                # Calculate last clean block boundary
-                last_clean_block = ((last_non_mask + 1) // block_size) * block_size
-                
-                # Start from last clean block
-                gen_seq = seq[:, last_clean_block:]  # Only the generation part from last clean block
-                gen_tok_idx = tok_idx[:, last_clean_block:] if tok_idx is not None else None
-                
-                out = dream_model(gen_seq, None, gen_tok_idx,
-                                use_block_diffusion=True,
-                                use_full_query_attn=False,
-                                max_length=max_len,
-                                block_size=block_size,
-                                save_cache=True,
-                                clean_idx=last_clean_block + 1)  # Save cache up to last clean block
-                
-                # Logits has shape [1, remaining_len, vocab_size]
-                logits = torch.cat([out.logits[:, :1], out.logits[:, :-1]], 1)
-                # Get mask positions relative to the generation part
-                gen_mask_pos = (gen_seq[0] == mask_id).nonzero(as_tuple=True)[0]
-                drafts = logits[0, gen_mask_pos, :].argmax(-1)
-                
-                # Convert gen_mask_pos back to full sequence positions for updating
-                mask_pos = gen_mask_pos + last_clean_block
-            elif aggressive_caching:
-                # Start from last clean token
-                gen_seq = seq[:, last_non_mask:]  # Only the generation part from last clean token
-                gen_tok_idx = tok_idx[:, last_non_mask:] if tok_idx is not None else None
-                
-                out = dream_model(gen_seq, None, gen_tok_idx,
-                                use_block_diffusion=True,
-                                use_full_query_attn=False,
-                                max_length=max_len,
-                                block_size=block_size,
-                                save_cache=True,
-                                clean_idx=last_non_mask + 1)  # Save cache up to last clean token
-                
-                # Logits has shape [1, remaining_len, vocab_size]
-                logits = torch.cat([out.logits[:, :1], out.logits[:, :-1]], 1)
-                # Get mask positions relative to the generation part
-                gen_mask_pos = (gen_seq[0] == mask_id).nonzero(as_tuple=True)[0]
-                drafts = logits[0, gen_mask_pos, :].argmax(-1)
-                
-                # Convert gen_mask_pos back to full sequence positions for updating
-                mask_pos = gen_mask_pos + last_non_mask
             else:
                 # Original behavior: start from prompt_len
                 gen_seq = seq[:, prompt_len:]  # Only the generation part

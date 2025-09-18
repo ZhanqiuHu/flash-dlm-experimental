@@ -2,12 +2,12 @@
 
 wandb:
   project_name: dream-guided-diffusion-rebuttal
-  experiment_name: gsm8k-dream-v2-qwen2.5-1.5b-guided-diffusion-subsample
+  experiment_name: gsm8k-dream-flash-qwen2.5-1.5b-guided-diffusion-subsample
   flag: true
 
 model:
   # autoregressive "verifier" (target) model
-  model_type: Qwen/Qwen2.5-1.5B
+  model_type: Qwen/Qwen2.5-14B-Instruct
   # diffusion "proposer" (draft) model
   draft_model: Dream-org/Dream-Flash-Instruct-7B
 
@@ -26,7 +26,7 @@ save:
 
 eval:
   cot: true
-  max_gen_toks: 1024
+  max_gen_toks: 512
   max_samples: 0  # Randomly sample 100 examples for testing
   subsample_seed: 42  # Seed for reproducible random sampling
 
@@ -35,7 +35,7 @@ train:
 
 dream:
   # diffusion hyperparameters for the draft model
-  steps: 1024
+  steps: 512
   eps: 1e-3
 
   # block diffusion for performance
@@ -44,7 +44,7 @@ dream:
   use_full_query_attn: false
 
   use_sliding_window_caching: true
-  sliding_window_size: (256, 256)
+  sliding_window_size: 256
 
   # early stopping on EOS
   early_stop: true
@@ -62,4 +62,4 @@ dream:
   verify_batch_size: 32
 
   # Enable assisted decoding mode
-  use_assisted: true
+  use_assisted: false

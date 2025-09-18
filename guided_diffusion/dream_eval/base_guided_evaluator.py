@@ -286,7 +286,7 @@ class BaseGuidedEvaluator:
                 use_sliding_window_caching=self.cfg["dream"].get("use_sliding_window_caching",False),
                 sliding_window_size=self.cfg["dream"].get("sliding_window_size",128),
                 use_block_boundary_caching=self.cfg["dream"].get("use_block_boundary_caching",False),
-                stop_on_dream_eos=self.cfg["dream"].get("stop_on_dream_eos",False),
+                stop_on_dream_eos=self.cfg["dream"].get("stop_on_dream_eos",True),
                 return_dict_in_generate=True,
             )
             if use_block: cfg.block_size = block_size
