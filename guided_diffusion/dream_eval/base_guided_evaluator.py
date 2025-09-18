@@ -21,13 +21,13 @@ BOLD = "\033[1m"   # bold
 RESET = "\033[0m"  # reset color
 
 from src.model.auto_map import ModelMap
-from guided_diffusion.diff_spec_utils_shifted import (
+from guided_diffusion.spec_diff_utils import (
     speculative_diffusion_generate,
     speculative_block_diffusion_generate,
     SpecDiffusionConfig,
     ARVerifier,
 )
-from guided_diffusion.diff_spec_utils_assisted import (
+from guided_diffusion.guided_diff_utils import (
     # assisted_diffusion_generate,
     assisted_block_diffusion_generate,
     AssistedDiffusionConfig,
@@ -120,7 +120,7 @@ class GuidedDiffusionLogger:
             json.dump(self.results, f, indent=2)
         print(f"Results saved to: {self.log_path}")
 
-class BaseSpecEvaluator:
+class BaseGuidedEvaluator:
     """
     Shared speculative-diffusion evaluator.
     Subclasses must pass:

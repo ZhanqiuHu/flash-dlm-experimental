@@ -8,7 +8,7 @@ root = Path(__file__).resolve().parent.parent.parent
 sys.path += [str(root), str(root / "src")]
 
 from src.dataset.gsm8k import GSM8K
-from guided_diffusion.dream_eval.base_spec_evaluator import BaseSpecEvaluator
+from guided_diffusion.dream_eval.base_guided_evaluator import BaseGuidedEvaluator
 
 # ANSI color codes for output formatting
 BLUE = "\033[94m"  # bright blue
@@ -88,7 +88,7 @@ def extract_answer(text: str) -> str:
     
     return ""
 
-class GSM8KSpecEvaluator(BaseSpecEvaluator):
+class GSM8KSpecEvaluator(BaseGuidedEvaluator):
     """GSM8K speculative diffusion evaluator using the base evaluator."""
     
     def __init__(self, cfg_path: str):
