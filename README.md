@@ -1,8 +1,28 @@
 # Flash-DLM
 
+[![arXiv](https://img.shields.io/badge/arXiv-2505.21467-b31b1b.svg)](https://arxiv.org/abs/2505.21467)
+[![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
+
 Accelerating Diffusion Language Model Inference via Efficient KV Caching and Guided Diffusion
 
+Flash-DLM implements guided diffusion for accelerating diffusion language model inference, as described in our paper ["Accelerating Diffusion Language Model Inference via Efficient KV Caching and Guided Diffusion"](https://arxiv.org/abs/2505.21467).
+
 **Note: This is experimental research code under development.**
+
+## Key Features
+
+- **Guided Diffusion**: Using lightweight autoregressive model to choose safe-to-unmask tokens in diffusion language model 
+- **KV Caching**: Default guided diffusion uses sliding window caching, KV projections within the sliding window are recomputed.
+- **Evaluation**: Built-in evaluation scripts for GSM8K and other benchmarks (coming soon)
+
+## Installation
+
+```bash
+conda env create -f environment.yml
+conda activate flash-dlm
+```
 
 ## Usage
 
