@@ -7,9 +7,9 @@ from transformers import AutoModelForCausalLM, AutoConfig
 from src.model.dream.configuration_dream import ODreamConfig
 from src.model.dream.modeling_dream import DreamForCausalLM
 
-# LLaDA v2
-from src.model.llada_v2.configuration_llada import LLaDAV2Config
-from src.model.llada_v2.modeling_llada import LLaDAV2ModelLM
+# # LLaDA v2
+# from src.model.llada_v2.configuration_llada import LLaDAV2Config
+# from src.model.llada_v2.modeling_llada import LLaDAV2ModelLM
 
 from src.model.dream_flash.configuration_dream import ODreamConfig as DreamFlashConfig
 from src.model.dream_flash.modeling_dream import DreamForCausalLM as DreamFlashForCausalLM
@@ -21,9 +21,9 @@ AutoConfig.register("odream", ODreamConfig)
 AutoModelForCausalLM.register(ODreamConfig, DreamForCausalLM)
 
 
-# register the LLaDA v2 model (Block-Cached)
-AutoConfig.register("ollada_v2", LLaDAV2Config) 
-AutoModelForCausalLM.register(LLaDAV2Config, LLaDAV2ModelLM)
+# # register the LLaDA v2 model (Block-Cached)
+# AutoConfig.register("ollada_v2", LLaDAV2Config) 
+# AutoModelForCausalLM.register(LLaDAV2Config, LLaDAV2ModelLM)
 
 # register the Dream Flash model
 AutoConfig.register("odream_flash", DreamFlashConfig)
