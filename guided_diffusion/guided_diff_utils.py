@@ -895,7 +895,14 @@ def assisted_block_diffusion_generate(
             else:
                 mask_pos = torch.tensor([], dtype=torch.long, device=seq.device)
             
-            drafts = logits[0, mask_pos, :].argmax(-1)
+            # Apply temperature sampling to Dream model draft generation
+            if config.temperature > 0:
+                print(f"DEBUG: Applying temperature sampling to Dream model draft generation with temperature {config.temperature}")
+                mask_logits = logits[0, mask_pos, :]
+                probs = F.softmax(mask_logits / config.temperature, dim=-1)
+                drafts = torch.multinomial(probs, 1).squeeze(-1)
+            else:
+                drafts = logits[0, mask_pos, :].argmax(-1)
         else:
             if use_sliding_window_caching:
                 gen_seq = seq[:, sliding_window_start:sliding_window_end]
@@ -915,20 +922,15 @@ def assisted_block_diffusion_generate(
                 # Logits has shape [1, remaining_len, vocab_size]
                 logits = torch.cat([out.logits[:, :1], out.logits[:, :-1]], dim=1)
                 # Get mask positions relative to the generation part
-                # OLD: gen_mask_pos = (gen_seq[0] == mask_id).nonzero(as_tuple=True)[0]
+                gen_mask_pos = (gen_seq[0] == mask_id).nonzero(as_tuple=True)[0]
                 
-                # Optimized: find first mask and then get all subsequent masks
-                first_mask = (gen_seq[0] == mask_id).nonzero(as_tuple=True)[0]
-                if len(first_mask) > 0:
-                    # Only scan from the first mask position onwards
-                    start_pos = first_mask[0]
-                    remaining_seq = gen_seq[0, start_pos:]
-                    relative_mask_pos = (remaining_seq == mask_id).nonzero(as_tuple=True)[0]
-                    gen_mask_pos = relative_mask_pos + start_pos
+                # Apply temperature sampling to Dream model draft generation
+                if config.temperature > 0:
+                    mask_logits = logits[0, gen_mask_pos, :]
+                    probs = F.softmax(mask_logits / config.temperature, dim=-1)
+                    drafts = torch.multinomial(probs, 1).squeeze(-1)
                 else:
-                    gen_mask_pos = torch.tensor([], dtype=torch.long, device=gen_seq.device)
-                
-                drafts = logits[0, gen_mask_pos, :].argmax(-1)
+                    drafts = logits[0, gen_mask_pos, :].argmax(-1)
 
                 # Convert gen_mask_pos back to full sequence positions for updating
                 mask_pos = gen_mask_pos + sliding_window_start
@@ -951,18 +953,15 @@ def assisted_block_diffusion_generate(
                 
                 # Logits has shape [1, max_len - prompt_len (i.e., gen_len), vocab_size]
                 logits = torch.cat([out.logits[:, :1], out.logits[:, :-1]], 1)
-                # OLD: gen_mask_pos = (gen_seq[0] == mask_id).nonzero(as_tuple=True)[0]
-                # Get mask positions relative to the generation part (optimized)
-                first_mask = (gen_seq[0] == mask_id).nonzero(as_tuple=True)[0]
-                if len(first_mask) > 0:
-                    start_pos = first_mask[0]
-                    remaining_seq = gen_seq[0, start_pos:]
-                    relative_mask_pos = (remaining_seq == mask_id).nonzero(as_tuple=True)[0]
-                    gen_mask_pos = relative_mask_pos + start_pos
+                gen_mask_pos = (gen_seq[0] == mask_id).nonzero(as_tuple=True)[0]
+                
+                # Apply temperature sampling to Dream model draft generation
+                if config.temperature > 0:
+                    mask_logits = logits[0, gen_mask_pos, :]
+                    probs = F.softmax(mask_logits / config.temperature, dim=-1)
+                    drafts = torch.multinomial(probs, 1).squeeze(-1)
                 else:
-                    gen_mask_pos = torch.tensor([], dtype=torch.long, device=gen_seq.device)
-                # Use gen_mask_pos directly since logits corresponds to gen_seq
-                drafts = logits[0, gen_mask_pos, :].argmax(-1)
+                    drafts = logits[0, gen_mask_pos, :].argmax(-1)
                 
                 # Convert gen_mask_pos back to full sequence positions for updating
                 mask_pos = gen_mask_pos + prompt_len
@@ -1070,7 +1069,7 @@ def assisted_block_diffusion_generate(
                 last_non_mask = p
                 logger.debug(f"    slot {p}: draft={dream_tokenizer.decode([dr])} ({dr})"
                         f" → chosen={dream_tokenizer.decode([ch])} ({ch}) (mismatch)")
-                print(f"\033[1;33mStep {diffusion_step}\033[0m - \033[1;36mDraft: {dream_tokenizer.decode([dr])} ({dr})\033[0m | \033[1;35mAR: {dream_tokenizer.decode([ch])} ({ch})\033[0m")
+                logger.debug(f"Step {diffusion_step} - Draft: {dream_tokenizer.decode([dr])} ({dr}) | AR: {dream_tokenizer.decode([ch])} ({ch})")
 
                 # if dr is eos, update the sequence, then break off and set stopped to true
                 if dr == eos_id:
