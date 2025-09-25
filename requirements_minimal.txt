@@ -1,0 +1,24 @@
+# Core ML Dependencies (tested working versions)
+torch==2.7.0
+transformers>=4.56.0
+accelerate==1.3.0
+peft==0.14.0
+
+# Data & Evaluation
+datasets==4.1.1
+tqdm>=4.60.0
+wandb==0.19.8
+
+# Math & Scientific Computing
+sympy==1.14.0
+pylatexenc>=2.0.0
+numpy>=1.21.0
+
+# Configuration & Utilities
+pyyaml>=6.0
+pathlib2>=2.3.0; python_version < "3.4"
+
+# Optional but recommended for better performance
+# Uncomment if you want these optimizations:
+# xformers>=0.0.20
+# flash-attn>=2.0.0

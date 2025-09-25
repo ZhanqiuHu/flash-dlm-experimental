@@ -30,6 +30,7 @@ from guided_diffusion.spec_diff_utils import (
 from guided_diffusion.guided_diff_utils import (
     # assisted_diffusion_generate,
     assisted_block_diffusion_generate,
+    # assisted_generate,
     AssistedDiffusionConfig,
     ARAssistant,
 )
@@ -159,6 +160,9 @@ class BaseGuidedEvaluator:
         fh = logging.FileHandler(log_path)
         fh.setFormatter(Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
         logging.getLogger().addHandler(fh)
+        
+        # Store log path for stdout redirection
+        self.log_path = log_path
 
         # JSON logger + wandb
         self.eval_logger = GuidedDiffusionLogger(str(run_dir/"eval_results.json"))
@@ -235,6 +239,24 @@ class BaseGuidedEvaluator:
         set_seed(self.cfg.get("seed",5000))
 
     def run_evaluation(self):
+        # Create Tee class to duplicate output to both terminal and log file
+        import sys
+        class TeeOutput:
+            def __init__(self, *files):
+                self.files = files
+            def write(self, obj):
+                for f in self.files:
+                    f.write(obj)
+                    f.flush()
+            def flush(self):
+                for f in self.files:
+                    f.flush()
+        
+        # Clear the log file and redirect stdout to both terminal and log file
+        self.original_stdout = sys.stdout
+        self.log_file = open(self.log_path, 'w')  # 'w' mode to clear the file
+        sys.stdout = TeeOutput(sys.stdout, self.log_file)
+        
         # print config
         logging.info("="*60)
         logging.info("Configuration:")
@@ -295,20 +317,23 @@ class BaseGuidedEvaluator:
             t0 = time.perf_counter()
             if use_block:
                 fn = assisted_block_diffusion_generate if use_assist else speculative_block_diffusion_generate
+                out = fn(
+                    dream_model=self.model_d,
+                    ar_model=self.model_a,
+                    input_ids=inp,
+                    attention_mask=att,
+                    config=cfg,
+                    dream_tokenizer=self.tok_d,
+                    ar_tokenizer=self.tok_a,
+                )
             else:
-                raise NotImplementedError("Assisted diffusion is not implemented for non-block diffusion")
-                fn = assisted_diffusion_generate if use_assist else speculative_diffusion_generate
-
-            out = fn(
-                dream_model=self.model_d,
-                ar_model=self.model_a,
-                input_ids=inp,
-                attention_mask=att,
-                config=cfg,
-                dream_tokenizer=self.tok_d,
-                ar_tokenizer=self.tok_a,
-                ar_verifier=self.verifier,
-            )
+                # Use regular autoregressive generation without guided diffusion
+                fn = assisted_generate
+                out = fn(
+                    verifier=self.verifier,
+                    input_ids=inp,
+                    config=cfg,
+                )
             total_lat = (time.perf_counter()-t0)*1000; tot_lat += total_lat
 
             # Log current latency
@@ -760,3 +785,8 @@ class BaseGuidedEvaluator:
                                 f.write(f"Overhead: {avg_overhead_time_excl_first/total_time_excl_first*100:.1f}%\n")
         
         print(f"\nSummary is saved to: {log_path}")
+        
+        # Restore stdout and close log file
+        import sys
+        sys.stdout = self.original_stdout
+        self.log_file.close()

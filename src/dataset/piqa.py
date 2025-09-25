@@ -21,8 +21,11 @@ class PiQA(DataStage):
         # prompt template
         self.prompt_head = "Below is an instruction that describes a task. Write a response that appropriately completes the request. \n\n### Instruction:\n"
         
-        if self.enable_reasoning:
-            self.prompt_tail = "Please briefly explain your reasoning for your choice. Your response should end with \"The final answer is [answer]\" where [answer] is the response to the problem."
+        if self.enable_reasoning:  
+            self.prompt_tail = (
+                    "Please first reason and explain your reasoning briefly before providing the final answer to the question. "
+                    "Your response should end with \"The final answer is [answer]\" where [answer] is the response to the problem."
+                )
         else:
             self.prompt_tail = "Your response should end with \"The final answer is [answer]\" where [answer] is the response to the problem."
             

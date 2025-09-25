@@ -19,9 +19,14 @@ Flash-DLM implements guided diffusion for accelerating diffusion language model 
 
 ## Installation
 
+### Minimal Installation
 ```bash
-conda env create -f environment.yml
-conda activate flash-dlm
+# Create a new conda environment
+conda create --name flash-dlm-test python=3.11
+conda activate flash-dlm-test
+
+# Install minimal requirements
+pip install -r requirements_minimal.txt
 ```
 
 ## Usage
@@ -29,7 +34,7 @@ conda activate flash-dlm
 ### Example: Running GSM8K evaluation with Dream Flash model
 
 ```bash
-python guided_diffusion/dream_eval/gsm8k_guided_evaluator.py --config test_configs/dream/gsm8k/guided_diffusion/100samples/dream_flash_qwen2.5_1.5b_instruct_guided_diffusion_100samples.yaml
+python guided_diffusion/dream_eval/gsm8k_guided_evaluator.py --config test_configs/dream/gsm8k/guided_diffusion/<config-file>.yaml
 ```
 
 ## Citation
