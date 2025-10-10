@@ -1,13 +1,13 @@
 # Flash-DLM
 
-[![arXiv](https://img.shields.io/badge/arXiv-2505.21467-b31b1b.svg)](https://arxiv.org/abs/2505.21467)
+[![arXiv](https://img.shields.io/badge/arXiv-2505.21467v2-b31b1b.svg)](https://arxiv.org/abs/2505.21467v2)
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 
 Accelerating Diffusion Language Model Inference via Efficient KV Caching and Guided Diffusion
 
-Flash-DLM implements guided diffusion for accelerating diffusion language model inference, as described in our paper ["Accelerating Diffusion Language Model Inference via Efficient KV Caching and Guided Diffusion"](https://arxiv.org/abs/2505.21467).
+Flash-DLM implements guided diffusion for accelerating diffusion language model inference, as described in our paper ["FlashDLM: Accelerating Diffusion Language Model Inference via Efficient KV Caching and Guided Diffusion"](https://arxiv.org/abs/2505.21467v2).
 
 **Note: This is experimental research code under development.**
 
@@ -43,10 +43,10 @@ If you use this work, please cite our paper:
 
 ```bibtex
 @article{hu2025accelerating,
-  title={Accelerating Diffusion Language Model Inference via Efficient KV Caching and Guided Diffusion},
+  title={FlashDLM: Accelerating Diffusion Language Model Inference via Efficient KV Caching and Guided Diffusion},
   author={Hu, Zhanqiu and Meng, Jian and Akhauri, Yash and Abdelfattah, Mohamed S. and Seo, Jae-sun and Zhang, Zhiru and Gupta, Udit},
-  journal={arXiv preprint arXiv:2505.21467},
+  journal={arXiv preprint arXiv:2505.21467v2},
   year={2025},
-  url={https://arxiv.org/abs/2505.21467}
+  url={https://arxiv.org/abs/2505.21467v2}
 }
 ```
