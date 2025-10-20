@@ -11,6 +11,10 @@ Flash-DLM implements guided diffusion for accelerating diffusion language model 
 
 **Note: This is experimental research code under development.**
 
+## Demo
+
+![Flash-DLM Demo](demo/flashdlm-demo.gif)
+
 ## Key Features
 
 - **Guided Diffusion**: Using lightweight autoregressive model to choose safe-to-unmask tokens in diffusion language model 
