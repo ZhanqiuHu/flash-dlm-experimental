@@ -1,4 +1,4 @@
-# Flash-DLM
+# FlashDLM: dLLM Acceleration with Guided Parallel Decoding and KV Caching
 
 [![arXiv](https://img.shields.io/badge/arXiv-2505.21467v2-b31b1b.svg)](https://arxiv.org/abs/2505.21467v2)
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
@@ -19,7 +19,7 @@ FlashDLM achieves an average of **12.14x** end-to-end speedup on Dream-7B-Intrsu
 
 ## Key Features
 
-- **Guided Diffusion**: Using lightweight autoregressive model to choose safe-to-unmask tokens in diffusion language model 
+- **Guided Diffusion (Parallel Decoding)**: Using lightweight autoregressive model to choose safe-to-unmask tokens in diffusion language model 
 - **KV Caching**: Default guided diffusion uses sliding window caching, KV projections within the sliding window are recomputed.
 - **Evaluation**: Built-in evaluation scripts for GSM8K and other benchmarks (coming soon)
 
