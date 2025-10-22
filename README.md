@@ -5,9 +5,11 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 
-Accelerating Diffusion Language Model Inference via Efficient KV Caching and Guided Diffusion
+FlashDLM: Accelerating Diffusion Language Model Inference via Efficient KV Caching and Guided Diffusion
 
-Flash-DLM implements guided diffusion for accelerating diffusion language model inference, as described in our paper ["FlashDLM: Accelerating Diffusion Language Model Inference via Efficient KV Caching and Guided Diffusion"](https://arxiv.org/abs/2505.21467v2).
+FlashDLM implements guided diffusion for accelerating diffusion language model inference, as described in our paper ["FlashDLM: Accelerating Diffusion Language Model Inference via Efficient KV Caching and Guided Diffusion"](https://arxiv.org/abs/2505.21467v2).
+
+FlashDLM achieves an average of **12.14x** end-to-end speedup on Dream-7B-Intrsuct model across various tasks with no or minimal accuracy loss.
 
 **Note: This is experimental research code under development.**
 
