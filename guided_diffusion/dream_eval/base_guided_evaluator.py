@@ -140,6 +140,7 @@ class BaseGuidedEvaluator:
         self.answer_extractor = answer_extractor
         self.match_fn         = match_fn
         self._tqdm_desc       = None
+        self.skip_evaluation  = False
 
         # load config
         with open(cfg_path) as f:
@@ -152,17 +153,29 @@ class BaseGuidedEvaluator:
         run_dir.mkdir(parents=True, exist_ok=True)
         self.run_dir = run_dir
 
-        # file logger
+        # file logger path (create directory but delay handler until after skip check)
         log_fname = self.cfg["save"].get("logger", "evaluation.log")
         log_path = run_dir / log_fname
-        print(f"Logs will be saved to: {log_path}")
+        self.log_path = log_path
         log_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Early skip: if a completed run exists, mark and return before heavy init
+        try:
+            if log_path.exists() and log_path.stat().st_size > 0:
+                with open(log_path, 'r') as _f:
+                    _content = _f.read()
+                if "FINAL EVALUATION SUMMARY" in _content:
+                    print(f"[SKIP] Existing results detected at {log_path}. Skipping initialization.")
+                    self.skip_evaluation = True
+                    return
+        except Exception:
+            pass
+
+        # file logger (attach handler only if not skipping)
+        print(f"Logs will be saved to: {log_path}")
         fh = logging.FileHandler(log_path)
         fh.setFormatter(Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
         logging.getLogger().addHandler(fh)
-        
-        # Store log path for stdout redirection
-        self.log_path = log_path
 
         # JSON logger + wandb
         self.eval_logger = GuidedDiffusionLogger(str(run_dir/"eval_results.json"))
@@ -239,6 +252,10 @@ class BaseGuidedEvaluator:
         set_seed(self.cfg.get("seed",5000))
 
     def run_evaluation(self):
+        # Respect early skip decided in __init__
+        if getattr(self, "skip_evaluation", False):
+            print(f"[SKIP] Existing results detected at {self.log_path}. Skipping evaluation.")
+            return
         # Create Tee class to duplicate output to both terminal and log file
         import sys
         class TeeOutput:
@@ -752,13 +769,24 @@ class BaseGuidedEvaluator:
                         # Excluding first step breakdown
                         if len(time_bd['diffusion_prediction_time']) > 1:
                             # Skip first step (index 0)
-                            avg_dream_model_forward_time_excl_first = sum(time_bd['dream_model_forward_time'][1:]) / (len(time_bd['dream_model_forward_time']) - 1)
-                            avg_dream_overhead_time_excl_first = sum(time_bd['dream_overhead_time'][1:]) / (len(time_bd['dream_overhead_time']) - 1)
-                            avg_diffusion_time_excl_first = sum(time_bd['diffusion_prediction_time'][1:]) / (len(time_bd['diffusion_prediction_time']) - 1)
-                            avg_ar_model_time_excl_first = sum(time_bd['ar_model_forward_time'][1:]) / (len(time_bd['ar_model_forward_time']) - 1)
-                            avg_verification_strategy_time_excl_first = sum(time_bd['verification_strategy_time'][1:]) / (len(time_bd['verification_strategy_time']) - 1)
-                            avg_overhead_time_excl_first = sum(time_bd['overhead_time'][1:]) / (len(time_bd['overhead_time']) - 1)
-                            avg_total_step_time_excl_first = sum(time_bd['total_step_time'][1:]) / (len(time_bd['total_step_time']) - 1)
+                            num_steps_excl_first = len(time_bd['dream_model_forward_time']) - 1
+                            if num_steps_excl_first > 0:
+                                avg_dream_model_forward_time_excl_first = sum(time_bd['dream_model_forward_time'][1:]) / num_steps_excl_first
+                                avg_dream_overhead_time_excl_first = sum(time_bd['dream_overhead_time'][1:]) / num_steps_excl_first
+                                avg_diffusion_time_excl_first = sum(time_bd['diffusion_prediction_time'][1:]) / num_steps_excl_first
+                                avg_ar_model_time_excl_first = sum(time_bd['ar_model_forward_time'][1:]) / num_steps_excl_first
+                                avg_verification_strategy_time_excl_first = sum(time_bd['verification_strategy_time'][1:]) / num_steps_excl_first
+                                avg_overhead_time_excl_first = sum(time_bd['overhead_time'][1:]) / num_steps_excl_first
+                                avg_total_step_time_excl_first = sum(time_bd['total_step_time'][1:]) / num_steps_excl_first
+                            else:
+                                # Fallback to first step values if no steps to exclude
+                                avg_dream_model_forward_time_excl_first = time_bd['dream_model_forward_time'][0]
+                                avg_dream_overhead_time_excl_first = time_bd['dream_overhead_time'][0]
+                                avg_diffusion_time_excl_first = time_bd['diffusion_prediction_time'][0]
+                                avg_ar_model_time_excl_first = time_bd['ar_model_forward_time'][0]
+                                avg_verification_strategy_time_excl_first = time_bd['verification_strategy_time'][0]
+                                avg_overhead_time_excl_first = time_bd['overhead_time'][0]
+                                avg_total_step_time_excl_first = time_bd['total_step_time'][0]
                             
                             # Calculate total AR time excluding first step
                             avg_total_ar_time_excl_first = avg_ar_model_time_excl_first + avg_verification_strategy_time_excl_first

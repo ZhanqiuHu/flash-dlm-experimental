@@ -65,6 +65,7 @@ class AssistedDiffusionConfig(GenerationConfig):
         self.sampling_strategy      = kw.pop("sampling_strategy", "deterministic")
         self.confidence_threshold   = kw.pop("confidence_threshold", 0.1)
         self.acceptance_top_k       = kw.pop("acceptance_top_k", 5)  # Add top-k parameter for acceptance
+        self.relative_threshold     = kw.pop("relative_threshold", 0.5)
 
         # misc
         self.return_dict_in_generate= kw.pop("return_dict_in_generate", False)
@@ -235,8 +236,6 @@ class TokenMapper:
 
 class SamplingStrategy(Enum):
     DETERMINISTIC = auto()
-    DYNAMIC_THRESHOLD = auto()
-    AGGRESSIVE = auto()
     TOPK = auto()
     TOPK_RELATIVE = auto()  # New strategy that considers relative probabilities within top-k
     ORIGINAL = auto()
@@ -245,8 +244,6 @@ class SamplingStrategy(Enum):
     def from_string(cls, strategy_str: str) -> "SamplingStrategy":
         strategy_map = {
             "deterministic": cls.DETERMINISTIC,
-            "dynamic_threshold": cls.DYNAMIC_THRESHOLD,
-            "aggressive": cls.AGGRESSIVE,
             "topk": cls.TOPK,
             "topk_relative": cls.TOPK_RELATIVE,
             "original": cls.ORIGINAL,
@@ -360,69 +357,6 @@ class ARAssistant:
         
         return chosen_dream, accept_len
 
-    def _verify_dynamic_threshold(self, q_chunk: Tensor, probs_blk: Tensor, confidence_threshold: float, rng: torch.Generator) -> Tuple[List[int], int]:
-        """Original dynamic threshold verification strategy."""
-        chosen_dream = []
-        accept_len = 0
-        for q_id, probs_i in zip(q_chunk[0], probs_blk):
-            dream_prob = probs_i[q_id].item()
-            
-            # Accept if probability is above threshold
-            if dream_prob > confidence_threshold:
-                chosen_dream.append(self.token_mapper.qwen_to_dream_id(q_id.item()))
-                accept_len += 1
-            else:
-                # Sample from Qwen's distribution excluding Dream's token
-                probs_alt = probs_i.clone()
-                probs_alt[q_id] = 0  # Zero out draft token
-                probs_alt.div_(probs_alt.sum())
-                alt_q = torch.multinomial(probs_alt, 1, generator=rng).item()
-                chosen_dream.append(self.token_mapper.qwen_to_dream_id(alt_q))
-                break
-        return chosen_dream, accept_len
-
-    def _verify_aggressive(self, q_chunk: Tensor, probs_blk: Tensor, rng: torch.Generator) -> Tuple[List[int], int]:
-        """Original aggressive verification strategy."""
-        chosen_dream = []
-        accept_len = 0
-        for q_id, probs_i in zip(q_chunk[0], probs_blk):
-            # Get top-k tokens from verifier's distribution
-            top_k = 5
-            top_k_probs, top_k_ids = probs_i.topk(top_k)
-            
-            # Check if draft token is in top-k
-            if q_id.item() in top_k_ids:
-                chosen_dream.append(self.token_mapper.qwen_to_dream_id(q_id.item()))
-                accept_len += 1
-                continue
-            
-            # Check if verifier's probability for draft token is high enough
-            draft_prob = probs_i[q_id]
-            if draft_prob > 0.05:
-                chosen_dream.append(self.token_mapper.qwen_to_dream_id(q_id.item()))
-                accept_len += 1
-                continue
-            
-            # Check if draft token is in top-p
-            sorted_probs, sorted_ids = probs_i.sort(descending=True)
-            cumsum = torch.cumsum(sorted_probs, dim=0)
-            top_p_mask = cumsum <= 0.95
-            top_p_ids = sorted_ids[top_p_mask]
-            
-            if q_id.item() in top_p_ids:
-                chosen_dream.append(self.token_mapper.qwen_to_dream_id(q_id.item()))
-                accept_len += 1
-                continue
-            
-            # If not accepted, sample from verifier's distribution
-            probs_alt = probs_i.clone()
-            probs_alt[q_id] = 0
-            probs_alt.div_(probs_alt.sum())
-            alt_q = torch.multinomial(probs_alt, 1, generator=rng).item()
-            chosen_dream.append(self.token_mapper.qwen_to_dream_id(alt_q))
-            break
-        return chosen_dream, accept_len
-
     def _verify_topk(self, q_chunk: Tensor, probs_blk: Tensor, acceptance_top_k: int) -> Tuple[List[int], int]:
         """Top-k verification strategy."""
         chosen_dream = []
@@ -534,7 +468,7 @@ class ARAssistant:
         sampling_strategy: str = "deterministic",  # Use string-based strategy selection
         confidence_threshold: float = 0.1,  # Fixed confidence threshold
         acceptance_top_k: int = 5,  # Add top-k parameter
-        top_p: float = 0.95,  # Add top-p parameter # TODO: rename this hyperparameter for better clarity (confusing when used as relative_threshold)
+        relative_threshold: float = 0.5,  # Add top-p parameter # TODO: rename this hyperparameter for better clarity (confusing when used as relative_threshold)
     ) -> List[int]:
         """
         Verify `draft_ids` in contiguous chunks of `batch_size`.
@@ -609,14 +543,10 @@ class ARAssistant:
             strategy = SamplingStrategy.from_string(sampling_strategy)
             if strategy == SamplingStrategy.DETERMINISTIC:
                 chosen_dream_chunk, accept_len = self._verify_deterministic(q_chunk, probs_blk)
-            elif strategy == SamplingStrategy.DYNAMIC_THRESHOLD:
-                chosen_dream_chunk, accept_len = self._verify_dynamic_threshold(q_chunk, probs_blk, confidence_threshold, rng)
-            elif strategy == SamplingStrategy.AGGRESSIVE:
-                chosen_dream_chunk, accept_len = self._verify_aggressive(q_chunk, probs_blk, rng)
             elif strategy == SamplingStrategy.TOPK:
                 chosen_dream_chunk, accept_len = self._verify_topk(q_chunk, probs_blk, acceptance_top_k)
             elif strategy == SamplingStrategy.TOPK_RELATIVE:
-                chosen_dream_chunk, accept_len = self._verify_topk_relative(q_chunk, probs_blk, top_k=acceptance_top_k, relative_threshold=top_p)
+                chosen_dream_chunk, accept_len = self._verify_topk_relative(q_chunk, probs_blk, top_k=acceptance_top_k, relative_threshold=relative_threshold)
             elif strategy == SamplingStrategy.ORIGINAL:
                 chosen_dream_chunk, accept_len = self._verify_original(q_chunk, probs_blk, rng)
             verify_end = time.perf_counter()
@@ -817,10 +747,9 @@ def assisted_block_diffusion_generate(
     # Check caching strategies
     aggressive_caching = getattr(config, 'aggressive_caching', False)
     use_block_boundary_caching = getattr(config, 'use_block_boundary_caching', False)
-    print(f"DEBUG: use_block_boundary_caching = {use_block_boundary_caching}")
+    assert not use_block_boundary_caching, f"boundary caching not currently supported"
     use_sliding_window_caching = getattr(config, 'use_sliding_window_caching', False)
-    print(f"DEBUG: use_sliding_window_caching = {use_sliding_window_caching}")
-    print(f"DEBUG: config.use_sliding_window_caching = {getattr(config, 'use_sliding_window_caching', 'NOT_FOUND')}")
+    assert use_sliding_window_caching, f"only support sliding window caching at the moment"
     sliding_window_size = getattr(config, 'sliding_window_size', 128)
     
     # Parse sliding window size: support both single number and tuple
@@ -996,7 +925,7 @@ def assisted_block_diffusion_generate(
             sampling_strategy=config.sampling_strategy,
             confidence_threshold=config.confidence_threshold,
             acceptance_top_k=config.acceptance_top_k,
-            top_p=config.top_p
+            relative_threshold=config.relative_threshold
         )
         ar_verify_end_time = time.perf_counter()
         ar_verify_time = (ar_verify_end_time - ar_verify_start_time) * 1000  # Convert to ms
@@ -1159,7 +1088,7 @@ def assisted_block_diffusion_generate(
             history.append(seq.clone())
         # exit if last unmasked token is eos (last_non_mask)
         if seq[0, last_non_mask] == eos_id:
-            print(f"Last unmasked token is eos at step {diffusion_step}")
+            # print(f"Last unmasked token is eos at step {diffusion_step}")
             break
 
         if stopped:
