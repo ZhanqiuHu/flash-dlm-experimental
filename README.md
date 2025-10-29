@@ -37,6 +37,38 @@ pip install -r requirements_minimal.txt
 
 ## Usage
 
+### Command-line API (no Gradio)
+
+A minimal script to call the model directly without the Gradio UI is provided in `flash_dlm_api.py`.
+
+Basic usage (uses a default prompt):
+
+```bash
+python flash_dlm_api.py
+```
+
+Custom prompt:
+
+```bash
+python flash_dlm_api.py "Explain photosynthesis in simple terms."
+```
+
+Options:
+
+- `--max-new-tokens`: maximum generated tokens (default: 128)
+- `--temperature`: sampling temperature for the draft model (default: 0.2)
+- `--sampling-strategy`: token matching strategy for verification, one of `deterministic` or `topk_relative` (default: `deterministic`). When `topk_relative` is selected, the verifier uses top-2 with a relative threshold of 0.5.
+- `--verbose`: print generation stats
+
+Example with options:
+
+```bash
+python flash_dlm_api.py "Write a short poem about autumn" --sampling-strategy topk_relative --max-new-tokens 256 --verbose
+```
+
+Notes:
+- Default models: Dream `Dream-org/Dream-Flash-Instruct-7B` and AR `Qwen/Qwen2.5-1.5B-Instruct`. Override via `--dream-model` and `--ar-model`.
+
 ### Example: Running GSM8K evaluation with Dream Flash model
 
 ```bash
