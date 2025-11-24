@@ -7,10 +7,6 @@ from transformers import AutoModelForCausalLM, AutoConfig
 from src.model.dream.configuration_dream import ODreamConfig
 from src.model.dream.modeling_dream import DreamForCausalLM
 
-# # LLaDA v2
-from src.model.llada_v2.configuration_llada import LLaDAV2Config
-from src.model.llada_v2.modeling_llada import LLaDAV2ModelLM
-
 from src.model.dream_flash.configuration_dream import ODreamConfig as DreamFlashConfig
 from src.model.dream_flash.modeling_dream import DreamForCausalLM as DreamFlashForCausalLM
 
@@ -20,10 +16,6 @@ from peft import PeftModel
 AutoConfig.register("odream", ODreamConfig)
 AutoModelForCausalLM.register(ODreamConfig, DreamForCausalLM)
 
-
-# # register the LLaDA v2 model (Block-Cached)
-AutoConfig.register("ollada_v2", LLaDAV2Config) 
-AutoModelForCausalLM.register(LLaDAV2Config, LLaDAV2ModelLM)
 
 # register the Dream Flash model
 AutoConfig.register("odream_flash", DreamFlashConfig)
@@ -52,12 +44,8 @@ MODEL_LIBRARY_MAP = {
     "deepseek-ai/DeepSeek-R1-Distill-Llama-8B": ('transformers', 'AutoModelForCausalLM'),
 
     # Dream models
-    "GSAI-ML/LLaDA-8B-Instruct": ('transformers', 'AutoModelForCausalLM'),
     "Dream-org/Dream-v0-Instruct-7B": ('transformers', 'DreamForCausalLM'),
     "Dream-org/Dream-Flash-Instruct-7B": ('transformers', 'DreamFlashForCausalLM'),
-
-    # LLaDA v2 model
-    "GSAI-ML/LLaDA-8B-Instruct-v2": ('transformers', 'LLaDAV2ModelLM'),
 
     "Qwen/Qwen2.5-7B-Instruct": ('transformers', 'AutoModelForCausalLM'),
     "Qwen/Qwen2.5-7B": ('transformers', 'AutoModelForCausalLM'),
@@ -153,33 +141,6 @@ class ModelMap:
                             trust_remote_code=True,
                             torch_dtype=torch.float16,
                         )
-                    # LLaDA variants
-                    elif "LLaDA" in self.model_name or "llada" in self.model_name:
-                        if "-v2" in self.model_name:
-                            self.model_name = self.model_name.replace("-v2", "")
-                            config = LLaDAV2Config().from_pretrained(self.model_name)
-                            model = LLaDAV2ModelLM.from_pretrained(
-                                self.model_name,
-                                config=config,
-                                trust_remote_code=True,
-                                torch_dtype=torch.float16,
-                            )
-                            return model
-                        else:
-                            # config = LLaDAConfig().from_pretrained(self.model_name)
-                            raise ValueError(f"LLaDA model: {self.model_name} is not supported yet!")
-
-                        # import pdb; pdb.set_trace()
-
-                        model = AutoModelForCausalLM.from_pretrained(
-                            self.model_name,
-                            config=config,
-                            trust_remote_code=True,
-                            torch_dtype=torch.float16,
-                        )
-
-                        import pdb; pdb.set_trace()
-
                     # Qwen2.5-Omni variants
                     # elif "Qwen2.5-Omni" in self.model_name:
                     #     config = Qwen2_5OmniConfig.from_pretrained(self.model_name)
