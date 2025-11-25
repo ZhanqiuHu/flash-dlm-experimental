@@ -654,7 +654,6 @@ class DreamGenerationMixin:
                     
                     # feed in x[:, block_start:]
                     # print out input size
-                    print(f"x[:, block_start-1:block_end].shape: {x[:, block_start-1:block_end].shape}")
                     logits = self(
                         # x[:, block_start-1:block_end], 
                         x[:, block_start-1:], 
@@ -960,104 +959,105 @@ class DreamGenerationMixin:
             else:
                 # print(f"✅ Confidence valid! Min: {confidence.min().item()}, Max: {confidence.max().item()}")
                 pass
+            
+            # Unused
+            # if enable_confidence_based:
+            #     # --------- Confidence-based adaptive unmasking ----------
+            #     # Compute positions of masked tokens
+            #     positions = torch.nonzero(mask_index[0], as_tuple=False).squeeze(-1)  # shape: [num_masked_tokens]
 
-            if enable_confidence_based:
-                # --------- Confidence-based adaptive unmasking ----------
-                # Compute positions of masked tokens
-                positions = torch.nonzero(mask_index[0], as_tuple=False).squeeze(-1)  # shape: [num_masked_tokens]
+            #     # Optionally modify confidence based on decay_algorithm
+            #     if generation_config.decay_algorithm != "none":
+            #         if generation_config.decay_algorithm == "exponential":
+            #             alpha = generation_config.decay_params.get("alpha", 1.0)
+            #             pos_weights = torch.exp(-alpha * positions / x.shape[1])
+            #             confidence = confidence * pos_weights
+            #         elif generation_config.decay_algorithm == "exponential_on_raw_logits":
+            #             pass
+            #         elif generation_config.decay_algorithm == "linear":
+            #             alpha = generation_config.decay_params.get("alpha", 1.0)
+            #             pos_weights = 1.0 - alpha * positions / x.shape[1]
+            #             pos_weights = pos_weights.clamp(min=0.0)
+            #             confidence = confidence * pos_weights
+            #         elif generation_config.decay_algorithm == "exp_unmasked_ratio":
+            #             alpha = generation_config.decay_params.get("alpha", 1.0)
+            #             gamma = generation_config.decay_params.get("gamma", 1.0)
+            #             gen_len = x.shape[1] - prompt_len
+            #             relative_positions = positions - prompt_len
+            #             unmasked_ratio = 1 - (num_mask_token / gen_len)
+            #             unmasked_ratio = torch.tensor(unmasked_ratio, device=x.device)
+            #             alpha_t = alpha * torch.exp(-gamma * unmasked_ratio)
+            #             pos_weights = torch.exp(-alpha_t * relative_positions / gen_len)
+            #             confidence = confidence * pos_weights
+            #         elif generation_config.decay_algorithm == "exp_unmasked_ratio_v2":
+            #             alpha = generation_config.decay_params.get("alpha", 1.0)
+            #             gamma = generation_config.decay_params.get("gamma", 1.0)
+            #             full_len = x.shape[1]
+            #             unmasked_ratio = 1 - (num_mask_token / full_len)
+            #             unmasked_ratio = torch.tensor(unmasked_ratio, device=x.device)
+            #             alpha_t = alpha * torch.exp(-gamma * unmasked_ratio)
+            #             pos_weights = torch.exp(-alpha_t * positions / full_len)
+            #             confidence = confidence * pos_weights
+            #         elif generation_config.decay_algorithm == "kl_divergence":
+            #             print(f"KL divergence: {kl_divergence}", flush=True)
+            #             pass
 
-                # Optionally modify confidence based on decay_algorithm
-                if generation_config.decay_algorithm != "none":
-                    if generation_config.decay_algorithm == "exponential":
-                        alpha = generation_config.decay_params.get("alpha", 1.0)
-                        pos_weights = torch.exp(-alpha * positions / x.shape[1])
-                        confidence = confidence * pos_weights
-                    elif generation_config.decay_algorithm == "exponential_on_raw_logits":
-                        pass
-                    elif generation_config.decay_algorithm == "linear":
-                        alpha = generation_config.decay_params.get("alpha", 1.0)
-                        pos_weights = 1.0 - alpha * positions / x.shape[1]
-                        pos_weights = pos_weights.clamp(min=0.0)
-                        confidence = confidence * pos_weights
-                    elif generation_config.decay_algorithm == "exp_unmasked_ratio":
-                        alpha = generation_config.decay_params.get("alpha", 1.0)
-                        gamma = generation_config.decay_params.get("gamma", 1.0)
-                        gen_len = x.shape[1] - prompt_len
-                        relative_positions = positions - prompt_len
-                        unmasked_ratio = 1 - (num_mask_token / gen_len)
-                        unmasked_ratio = torch.tensor(unmasked_ratio, device=x.device)
-                        alpha_t = alpha * torch.exp(-gamma * unmasked_ratio)
-                        pos_weights = torch.exp(-alpha_t * relative_positions / gen_len)
-                        confidence = confidence * pos_weights
-                    elif generation_config.decay_algorithm == "exp_unmasked_ratio_v2":
-                        alpha = generation_config.decay_params.get("alpha", 1.0)
-                        gamma = generation_config.decay_params.get("gamma", 1.0)
-                        full_len = x.shape[1]
-                        unmasked_ratio = 1 - (num_mask_token / full_len)
-                        unmasked_ratio = torch.tensor(unmasked_ratio, device=x.device)
-                        alpha_t = alpha * torch.exp(-gamma * unmasked_ratio)
-                        pos_weights = torch.exp(-alpha_t * positions / full_len)
-                        confidence = confidence * pos_weights
-                    elif generation_config.decay_algorithm == "kl_divergence":
-                        print(f"KL divergence: {kl_divergence}", flush=True)
-                        pass
+            #     # Select tokens to unmask based on decay algorithm
+            #     if generation_config.decay_algorithm == "closest_confident_group":
+            #         # Get parameters from decay_params
+            #         max_scan_tokens = generation_config.decay_params.get("max_scan_tokens", 10)
+            #         confidence_threshold = generation_config.decay_params.get("confidence_threshold", 0.999)
 
-                # Select tokens to unmask based on decay algorithm
-                if generation_config.decay_algorithm == "closest_confident_group":
-                    # Get parameters from decay_params
-                    max_scan_tokens = generation_config.decay_params.get("max_scan_tokens", 10)
-                    confidence_threshold = generation_config.decay_params.get("confidence_threshold", 0.999)
+            #         # print out top 5 confidence values
+            #         # print(f"Top 5 confidence values: {torch.topk(confidence, k=5)}")
 
-                    # print out top 5 confidence values
-                    # print(f"Top 5 confidence values: {torch.topk(confidence, k=5)}")
+            #         num_to_scan = min(max_scan_tokens, len(confidence))
+            #         group = []
+            #         for idx in range(num_to_scan):
+            #             if confidence[idx] > confidence_threshold:
+            #                 group.append(idx)
+            #             else:
+            #                 # if len(group) > 0:
+            #                 #     break  # Stop after first group
+            #                 break
 
-                    num_to_scan = min(max_scan_tokens, len(confidence))
-                    group = []
-                    for idx in range(num_to_scan):
-                        if confidence[idx] > confidence_threshold:
-                            group.append(idx)
-                        else:
-                            # if len(group) > 0:
-                            #     break  # Stop after first group
-                            break
+            #         if len(group) > 0:
+            #             confident_indices = torch.tensor(group, device=confidence.device)
+            #         else:
+            #             _, confident_indices = torch.topk(confidence, k=1)
 
-                    if len(group) > 0:
-                        confident_indices = torch.tensor(group, device=confidence.device)
-                    else:
-                        _, confident_indices = torch.topk(confidence, k=1)
+            #         num_confident = confident_indices.numel()
+            #         number_transfer_tokens = int(num_mask_token * (1 - s / t)) if i < steps - 1 else num_mask_token
+            #         num_to_unmask = max(num_confident, number_transfer_tokens)
 
-                    num_confident = confident_indices.numel()
-                    number_transfer_tokens = int(num_mask_token * (1 - s / t)) if i < steps - 1 else num_mask_token
-                    num_to_unmask = max(num_confident, number_transfer_tokens)
+            #     else:
+            #         # Default adaptive unmasking
+            #         confidence_threshold = expected_mth_largest(confidence.min().item(), confidence.max().item(), num_mask_token, m=2)
+            #         confident_indices = torch.nonzero(confidence > confidence_threshold, as_tuple=False).squeeze(-1)
+            #         num_confident = confident_indices.numel()
+            #         number_transfer_tokens = int(num_mask_token * (1 - s / t)) if i < steps - 1 else num_mask_token
+            #         num_to_unmask = max(num_confident, number_transfer_tokens)
 
-                else:
-                    # Default adaptive unmasking
-                    confidence_threshold = expected_mth_largest(confidence.min().item(), confidence.max().item(), num_mask_token, m=2)
-                    confident_indices = torch.nonzero(confidence > confidence_threshold, as_tuple=False).squeeze(-1)
-                    num_confident = confident_indices.numel()
-                    number_transfer_tokens = int(num_mask_token * (1 - s / t)) if i < steps - 1 else num_mask_token
-                    num_to_unmask = max(num_confident, number_transfer_tokens)
+            #     # Actually perform the unmasking
+            #     if num_to_unmask > 0:
+            #         if num_confident > number_transfer_tokens:
+            #             num_confidents_dict[i] = num_confident
+            #             selected_indices = confident_indices
+            #         else:
+            #             _, selected_indices = torch.topk(confidence, num_to_unmask)
 
-                # Actually perform the unmasking
-                if num_to_unmask > 0:
-                    if num_confident > number_transfer_tokens:
-                        num_confidents_dict[i] = num_confident
-                        selected_indices = confident_indices
-                    else:
-                        _, selected_indices = torch.topk(confidence, num_to_unmask)
+            #         x0_ = torch.zeros_like(x0, device=self.device) + mask_token_id
+            #         x0_[selected_indices] = x0[selected_indices]
+            #         x[mask_index] = x0_
 
-                    x0_ = torch.zeros_like(x0, device=self.device) + mask_token_id
-                    x0_[selected_indices] = x0[selected_indices]
-                    x[mask_index] = x0_
+            #         if generation_config.early_stop:
+            #             last_pos = positions[selected_indices].max().item()
+            #             last_clean_token_position = max(last_clean_token_position, last_pos)
+            #             last_clean_token = x[0, last_clean_token_position].item()
 
-                    if generation_config.early_stop:
-                        last_pos = positions[selected_indices].max().item()
-                        last_clean_token_position = max(last_clean_token_position, last_pos)
-                        last_clean_token = x[0, last_clean_token_position].item()
-
-                    tokens_unmasked = num_to_unmask
-                    delta_step = max(1, int(tokens_unmasked // avg_tokens_per_step))
-                    i += delta_step
+            #         tokens_unmasked = num_to_unmask
+            #         delta_step = max(1, int(tokens_unmasked // avg_tokens_per_step))
+            #         i += delta_step
 
 
 
@@ -1099,462 +1099,6 @@ class DreamGenerationMixin:
             print(f"num_confidents_dict: {num_confidents_dict}", flush=True)
         return x
 
-    def _sample_block_diffusion_v2(
-        self, x, attention_mask, tok_idx,
-        generation_config,
-        generation_tokens_hook_func,
-        generation_logits_hook_func,
-        histories
-    ):
-        # print(f"In _sample_block_diffusion()", flush=True)
-
-        BLUE = "\033[94m"   
-        RESET = "\033[0m"
-        # Debug
-        print(f"Inside Dream-v2 block diffusion v2", flush=True)
-        # print(f"{BLUE}generation_config: {generation_config}{RESET}", flush=True)
-        # print(f"{BLUE}kwargs: {kwargs}{RESET}", flush=True)
-
-        steps, eps, alg, alg_temp, temperature, top_p, top_k, mask_token_id = (
-            generation_config.steps,
-            generation_config.eps,
-            generation_config.alg,
-            generation_config.alg_temp,
-            generation_config.temperature,
-            generation_config.top_p,
-            generation_config.top_k,
-            generation_config.mask_token_id
-        )
-        block_size = generation_config.block_size
-        use_full_query_attn = generation_config.use_full_query_attn
-        timesteps = torch.linspace(1, eps, steps + 1, device=x.device)
-
-        # add a flag to use sliding window caching
-        sliding_window_caching = generation_config.sliding_window_caching
-        left_window_size = generation_config.left_window_size
-        right_window_size = generation_config.right_window_size
-
-        prompt_len = (x != mask_token_id).sum(dim=-1).max().item()
-
-        # num_blocks = steps // block_size
-        # TODO: fix this to -- num_blocks = max new tokens // block_size
-        if not sliding_window_caching:
-            num_blocks = generation_config.max_new_tokens // block_size
-            # For now, enforce the max_new_tokens to be divisible by block_size
-            assert generation_config.max_new_tokens % block_size == 0, "max_new_tokens must be divisible by block_size"
-            num_steps_per_block = steps // num_blocks
-            # For now, enforce the steps to be divisible by num_blocks
-            assert steps % num_blocks == 0, "steps must be divisible by num_blocks"
-
-        avg_tokens_per_step = generation_config.max_new_tokens / steps
-        
-
-        # Log if using sliding window caching
-        if sliding_window_caching:
-            BLUE = "\033[94m"   
-            RESET = "\033[0m"
-            print(f"{BLUE}Using sliding window caching with left size {left_window_size} and right size {right_window_size}{RESET}", flush=True)
-
-
-        # NEW FEATURE: early stopping
-        # Keep track of the last clean token position and token
-        last_clean_token_position = -1 
-        last_clean_token = None
-
-        if sliding_window_caching:
-            diffusion_step = -1
-            bsz = x.shape[0]
-            # while there's any masked token in the sequence, keep generating
-            while (x == mask_token_id).any():
-                diffusion_step += 1
-                masked_tok_positions = torch.nonzero(x == mask_token_id, as_tuple=False).squeeze(-1)
-                # find the first masked token 
-                first_masked_tok_pos = masked_tok_positions[0].item()
-                sliding_window_start = max(0, first_masked_tok_pos-left_window_size)
-                # sliding_window_end = min(L, first_masked_tok_pos+right_window_size)
-                sliding_window_end = L # Do end of sequence for now
-
-                x_curr_block = x[:, sliding_window_start:sliding_window_end]
-                # mask_pos_curr_block = (x_curr_block == mask_token_id).nonzero(as_tuple=True)[0]
-                mask_index_curr_block = (x_curr_block == mask_token_id)
-
-                if diffusion_step == 0:
-                    # At the first global step 0, reset the block cache
-                    for layer_idx in range(self.config.num_hidden_layers):
-                        self.model.layers[layer_idx].reset_block_cache(bsz, L, block_size)
-                
-                    # Model forward
-                    logits = self(x, None, tok_idx if tok_idx is not None else None,
-                                use_block_diffusion=True,
-                                use_full_query_attn=False,
-                                max_length=generation_config.max_length,
-                                block_size=block_size, # this is actually not really used by the model forward pass
-                                save_cache=True,
-                                clean_idx=sliding_window_start).logits
-                    
-                    # all the mask positions in the full sequence of length L
-                    # x_curr_block = x[:, sliding_window_start:sliding_window_end]
-                    # gen_mask_pos = (x_curr_block == mask_token_id).nonzero(as_tuple=True)[0]
-                    
-                    # mask_pos w.r.t. to the full sequence of length L
-                    # mask_pos = gen_mask_pos + sliding_window_start
-
-                    # only the mask positions in the current block
-                    # length: sliding_window_end - sliding_window_start
-                    # mask_logits = logits[mask_pos]
-
-                    logits_block = logits[:, sliding_window_start:sliding_window_end]
-                    # # shift the logits to the right by 1, length: L
-                    # logits_block = torch.cat([logits_block[:, :1], logits_block[:, :-1]], 1)
-
-                else:
-                    # for later steps > step 0
-                    gen_seq = x[:, sliding_window_start:sliding_window_end]
-                    gen_tok_idx = tok_idx[:, sliding_window_start:sliding_window_end] if tok_idx is not None else None
-
-                    logits = self(
-                        gen_seq, 
-                        gen_tok_idx, 
-                        None,
-                        use_block_diffusion=True,
-                        use_full_query_attn=False,
-                        max_length=generation_config.max_length,
-                        block_size=block_size, # not really used, can ignore
-                        save_cache=True,
-                        clean_idx=sliding_window_start).logits
-
-                
-                    # gen_mask_pos = (gen_seq[0] == mask_token_id).nonzero(as_tuple=True)[0]
-                    
-                    # # mask_pos w.r.t. the full sequence of length L
-                    # mask_pos = gen_mask_pos + sliding_window_start
-
-                    logits_block = logits
-                    # # mask_logits = logits[gen_mask_pos]
-                    # logits_block = torch.cat([logits_block[:, :1], logits_block[:, :-1]], 1)
-                    # mask_logits = logits[mask_index_curr_block]
-
-                # shift the logits to the right by 1, length: block_size
-                logits_block = torch.cat([logits_block[:, :1], logits_block[:, :-1]], dim=1)
-                mask_logits = logits_block[mask_index_curr_block]
-
-                t, s = timesteps[i], timesteps[i + 1]
-
-                if alg == 'origin':
-                    # p_transfer = 1 - s / t if step_idx < block_size - 1 else 1
-                    p_transfer = 1 - s / t if step_idx < num_steps_per_block - 1 else 1
-                    # x0 = torch.zeros_like(x_curr_block[mask_pos_curr_block], device=self.device, dtype=torch.long) + mask_token_id
-                    x0 = torch.zeros_like(x_curr_block[mask_index_curr_block], device=self.device, dtype=torch.long) + mask_token_id
-
-                    transfer_index_t_s = torch.rand(*x0.shape, device=self.device) < p_transfer
-                    _, x0[transfer_index_t_s] = sample_tokens(mask_logits[transfer_index_t_s], temperature=temperature, top_p=top_p, top_k=top_k)
-                    # x_curr_block[mask_pos_curr_block] = x0.clone()
-                    x_curr_block[mask_index_curr_block] = x0.clone()
-                    x[:, block_start:block_end] = x_curr_block.clone()
-
-                    if generation_config.early_stop:
-                        if transfer_index_t_s.any():
-                            # last_pos = torch.nonzero(block_mask_index)[transfer_index_t_s].max().item()
-                            # last_pos = torch.nonzero(mask_pos_curr_block)[transfer_index_t_s].max().item()
-                            last_pos = torch.nonzero(mask_index_curr_block)[transfer_index_t_s].max().item()
-                            last_clean_token_position = max(last_clean_token_position, block_start + last_pos)
-                            last_clean_token = x[0, last_clean_token_position].item()
-
-                else:
-                    if alg == 'maskgit_plus':
-                        confidence, x0 = sample_tokens(
-                            mask_logits, 
-                            temperature=temperature, 
-                            top_p=top_p, 
-                            top_k=top_k,
-                            )
-                    elif alg == 'topk_margin':
-                        confidence, x0 = sample_tokens(
-                            mask_logits, 
-                            temperature=temperature, 
-                            top_p=top_p, 
-                            top_k=top_k, 
-                            margin_confidence=True,                            
-                            )
-                    elif alg == 'entropy':
-                        confidence, x0 = sample_tokens(
-                            mask_logits, 
-                            temperature, 
-                            top_p=top_p, 
-                            top_k=top_k, 
-                            neg_entropy=True,
-                            )
-                    # TODO: Need to check if this is correct
-                    elif alg == 'position_weighted':
-                        # Sample tokens normally
-                        confidence, x0 = sample_tokens(
-                            mask_logits,
-                            temperature=temperature,
-                            top_p=top_p,
-                            top_k=top_k,
-                        )
-                        # Apply position-based weights to confidence
-                        # Get positions of masked tokens
-                        # positions = torch.nonzero(mask_pos_curr_block, as_tuple=False).squeeze(-1)
-                        positions = torch.nonzero(mask_index_curr_block, as_tuple=False).squeeze(-1)
-                        # Calculate weights: higher for lower positions (more left)
-                        # Normalize positions to [0, 1] range and invert (1 - pos) to give higher weights to lower positions
-                        max_pos = positions.max().item() if positions.numel() > 0 else 1
-                        pos_weights = 1.0 - (positions.float() / max_pos)
-                        # Apply weights to confidence
-                        confidence = confidence * pos_weights
-                    else:
-                        raise RuntimeError(f"Unknown alg: {alg}")
-
-                # num_mask_token = mask_pos_curr_block.numel()
-                # assert mask_pos_curr_block.numel() == mask_pos_curr_block.sum(), "mask_pos_curr_block should only contain 1s"
-                num_mask_token = mask_index_curr_block.sum()
-
-
-                total_num_mask_token = num_mask_token + (num_blocks - block_idx - 1) * block_size
-                # number_transfer_tokens = int(total_num_mask_token * (1 - s / t)) if step_idx < block_size - 1 else num_mask_token
-                number_transfer_tokens = int(total_num_mask_token * (1 - s / t)) \
-                    if step_idx < num_steps_per_block - 1 \
-                        else num_mask_token # unmask all masked tokens at last step of the block
-
-                if number_transfer_tokens > 0:
-                    if alg_temp is None or alg_temp == 0:
-                        _, transfer_index = torch.topk(confidence, number_transfer_tokens)
-                    else:
-                        confidence = confidence / alg_temp
-                        confidence = F.softmax(confidence, dim=-1)
-                        transfer_index = torch.multinomial(confidence, num_samples=number_transfer_tokens)
-                    x0_ = torch.zeros_like(x0, device=self.device, dtype=torch.long) + mask_token_id
-                    x0_[transfer_index] = x0[transfer_index].clone()
-                    # x_partial[block_mask_index] = x0_.clone()
-                    # x_curr_block[mask_pos_curr_block] = x0_.clone()
-                    x_curr_block[mask_index_curr_block] = x0_.clone()
-                    # x[:, block_start:block_end] = x_partial.clone()
-                    x[:, block_start:block_end] = x_curr_block.clone()
-
-                    if generation_config.early_stop:
-                        # last_pos = torch.nonzero(block_mask_index)[transfer_index].max().item()
-                        # last_pos = torch.nonzero(mask_pos_curr_block)[transfer_index].max().item()
-                        last_pos = torch.nonzero(mask_index_curr_block)[transfer_index].max().item()
-                        last_clean_token_position = max(last_clean_token_position, block_start + last_pos)
-                        last_clean_token = x[0, last_clean_token_position].item()
-
-
-                x = generation_tokens_hook_func(i, x, logits)
-
-                if histories is not None:
-                    histories.append(x.clone())
-
-                # Check for EOS in newly generated tokens and handle early stopping
-                if generation_config.early_stop:
-                    # Check if any EOS token was generated in this iteration
-                    newly_generated = (x0_ != mask_token_id)
-                    if newly_generated.any():
-                        newly_generated_tokens = x0_[newly_generated]
-                        if generation_config.eos_token_id in newly_generated_tokens:
-                            # Find the first EOS position in the full sequence
-                            eos_positions = torch.nonzero(x[0] == generation_config.eos_token_id).squeeze(-1)
-                            if eos_positions.numel() > 0:
-                                first_eos_pos = eos_positions[0].item()
-                                x[0, first_eos_pos:] = generation_config.eos_token_id
-                                return x
-                    
-                    # If no masked tokens left, early stop
-                    if not (x == mask_token_id).any():
-                        return x
-
-                if generation_config.early_stop:
-                    if self._check_early_stop(x, last_clean_token_position, last_clean_token, generation_config):
-                        print(f"Early stopping at block {block_idx}, step {step_idx}, i: {i}", flush=True)
-                        mask_index_remaining = (x == generation_config.mask_token_id)
-                        x[mask_index_remaining] = generation_config.eos_token_id
-                        return x
-                
-        else:       
-            # Use regular block(-cached) diffusion
-            for block_idx in range(num_blocks):
-                # Iterating over blocks
-                block_start = prompt_len + block_idx * block_size
-                block_end = prompt_len + (block_idx + 1) * block_size
-
-                # for step_idx in range(block_size):
-                for step_idx in range(num_steps_per_block):
-
-                    # i = block_idx * block_size + step_idx
-                    # fix this to -- i = block_idx * num_steps_per_block + step_idx
-                    i = block_idx * num_steps_per_block + step_idx # i is the global step index
-
-
-                    # x_partial = x[:, block_start:block_end].clone()
-                    x_curr_block = x[:, block_start:block_end]
-                    # mask_pos_curr_block = (x_curr_block == mask_token_id).nonzero(as_tuple=True)[0]
-                    mask_index_curr_block = (x_curr_block == mask_token_id)
-
-                    # save_cache = step_idx == block_size - 1 # save cache for the last step of the block
-                    # last step of the block
-                    save_cache = step_idx == num_steps_per_block - 1
-
-                    # Another attempt to recover accuracy
-                    bsz = x.shape[0]
-                    L = generation_config.max_length
-                    end_of_sentence = L 
-
-                    if i == 0:
-                        # At the first global step 0, reset the block cache
-                        for layer_idx in range(self.config.num_hidden_layers):
-                            self.model.layers[layer_idx].reset_block_cache(bsz, L, block_size)
-
-                        # Pass in the entire input x, and the block caching will be used
-                        # We get the logits of corresponding block 
-                        logits = self(x, None, tok_idx if tok_idx is not None else None,
-                                    use_block_diffusion=True,
-                                    use_full_query_attn=False,
-                                    max_length=generation_config.max_length,
-                                    block_size=block_size,
-                                    save_cache=True,
-                                    # clean_idx=prompt_len).logits[:, block_start:block_end]
-                                    clean_idx=block_start).logits
-                        
-                        # logits size: batch_size, L, vocab_size
-                        logits_block = logits[:, block_start:block_end]
-
-                    else:        
-                        # At later steps > step 0
-                        gen_seq = x[:, block_start:]
-                        gen_tok_idx = tok_idx[:, block_start:] if tok_idx is not None else None
-                        logits = self(gen_seq, 
-                                    gen_tok_idx, 
-                                    None,
-                                    use_block_diffusion=True,
-                                    use_full_query_attn=False,
-                                    max_length=generation_config.max_length,
-                                    block_size=block_size,
-                                    save_cache=save_cache,
-                                    clean_idx=block_end).logits # output length: block start until the end of the sequence
-                    
-                        logits_block = logits[:, :block_size]
-        
-                        # shift the logits to the right by 1, length: block_size
-                        logits_block = torch.cat([logits_block[:, :1], logits_block[:, :-1]], dim=1)
-                        mask_logits = logits_block[mask_index_curr_block]
-
-                        t, s = timesteps[i], timesteps[i + 1]
-
-                        if alg == 'origin':
-                            # p_transfer = 1 - s / t if step_idx < block_size - 1 else 1
-                            p_transfer = 1 - s / t if step_idx < num_steps_per_block - 1 else 1
-                            # x0 = torch.zeros_like(x_curr_block[mask_pos_curr_block], device=self.device, dtype=torch.long) + mask_token_id
-                            x0 = torch.zeros_like(x_curr_block[mask_index_curr_block], device=self.device, dtype=torch.long) + mask_token_id
-
-                            transfer_index_t_s = torch.rand(*x0.shape, device=self.device) < p_transfer
-                            _, x0[transfer_index_t_s] = sample_tokens(mask_logits[transfer_index_t_s], temperature=temperature, top_p=top_p, top_k=top_k)
-                            # x_curr_block[mask_pos_curr_block] = x0.clone()
-                            x_curr_block[mask_index_curr_block] = x0.clone()
-                            x[:, block_start:block_end] = x_curr_block.clone()
-
-                            if generation_config.early_stop:
-                                if transfer_index_t_s.any():
-                                    # last_pos = torch.nonzero(block_mask_index)[transfer_index_t_s].max().item()
-                                    # last_pos = torch.nonzero(mask_pos_curr_block)[transfer_index_t_s].max().item()
-                                    last_pos = torch.nonzero(mask_index_curr_block)[transfer_index_t_s].max().item()
-                                    last_clean_token_position = max(last_clean_token_position, block_start + last_pos)
-                                    last_clean_token = x[0, last_clean_token_position].item()
-
-                        else:
-                            if alg == 'maskgit_plus':
-                                confidence, x0 = sample_tokens(
-                                    mask_logits, 
-                                    temperature=temperature, 
-                                    top_p=top_p, 
-                                    top_k=top_k,
-                                    )
-                            elif alg == 'topk_margin':
-                                confidence, x0 = sample_tokens(
-                                    mask_logits, 
-                                    temperature=temperature, 
-                                    top_p=top_p, 
-                                    top_k=top_k, 
-                                    margin_confidence=True,                            
-                                    )
-                            elif alg == 'entropy':
-                                confidence, x0 = sample_tokens(
-                                    mask_logits, 
-                                    temperature, 
-                                    top_p=top_p, 
-                                    top_k=top_k, 
-                                    neg_entropy=True,
-                                    )
-                            # TODO: Need to check if this is correct
-                            elif alg == 'position_weighted':
-                                # Sample tokens normally
-                                confidence, x0 = sample_tokens(
-                                    mask_logits,
-                                    temperature=temperature,
-                                    top_p=top_p,
-                                    top_k=top_k,
-                                )
-                                # Apply position-based weights to confidence
-                                # Get positions of masked tokens
-                                # positions = torch.nonzero(mask_pos_curr_block, as_tuple=False).squeeze(-1)
-                                positions = torch.nonzero(mask_index_curr_block, as_tuple=False).squeeze(-1)
-                                # Calculate weights: higher for lower positions (more left)
-                                # Normalize positions to [0, 1] range and invert (1 - pos) to give higher weights to lower positions
-                                max_pos = positions.max().item() if positions.numel() > 0 else 1
-                                pos_weights = 1.0 - (positions.float() / max_pos)
-                                # Apply weights to confidence
-                                confidence = confidence * pos_weights
-                            else:
-                                raise RuntimeError(f"Unknown alg: {alg}")
-
-                        # num_mask_token = mask_pos_curr_block.numel()
-                        # assert mask_pos_curr_block.numel() == mask_pos_curr_block.sum(), "mask_pos_curr_block should only contain 1s"
-                        num_mask_token = mask_index_curr_block.sum()
-
-
-                        total_num_mask_token = num_mask_token + (num_blocks - block_idx - 1) * block_size
-                        # number_transfer_tokens = int(total_num_mask_token * (1 - s / t)) if step_idx < block_size - 1 else num_mask_token
-                        number_transfer_tokens = int(total_num_mask_token * (1 - s / t)) \
-                            if step_idx < num_steps_per_block - 1 \
-                                else num_mask_token # unmask all masked tokens at last step of the block
-
-                        if number_transfer_tokens > 0:
-                            if alg_temp is None or alg_temp == 0:
-                                _, transfer_index = torch.topk(confidence, number_transfer_tokens)
-                            else:
-                                confidence = confidence / alg_temp
-                                confidence = F.softmax(confidence, dim=-1)
-                                transfer_index = torch.multinomial(confidence, num_samples=number_transfer_tokens)
-                            x0_ = torch.zeros_like(x0, device=self.device, dtype=torch.long) + mask_token_id
-                            x0_[transfer_index] = x0[transfer_index].clone()
-                            # x_partial[block_mask_index] = x0_.clone()
-                            # x_curr_block[mask_pos_curr_block] = x0_.clone()
-                            x_curr_block[mask_index_curr_block] = x0_.clone()
-                            # x[:, block_start:block_end] = x_partial.clone()
-                            x[:, block_start:block_end] = x_curr_block.clone()
-
-                            if generation_config.early_stop:
-                                # last_pos = torch.nonzero(block_mask_index)[transfer_index].max().item()
-                                # last_pos = torch.nonzero(mask_pos_curr_block)[transfer_index].max().item()
-                                last_pos = torch.nonzero(mask_index_curr_block)[transfer_index].max().item()
-                                last_clean_token_position = max(last_clean_token_position, block_start + last_pos)
-                                last_clean_token = x[0, last_clean_token_position].item()
-
-
-                        x = generation_tokens_hook_func(i, x, logits)
-
-                        if histories is not None:
-                            histories.append(x.clone())
-
-                        if generation_config.early_stop:
-                            if self._check_early_stop(x, last_clean_token_position, last_clean_token, generation_config):
-                                print(f"Early stopping at block {block_idx}, step {step_idx}, i: {i}", flush=True)
-                                mask_index_remaining = (x == generation_config.mask_token_id)
-                                x[mask_index_remaining] = generation_config.eos_token_id
-                                return x
-
-
-        return x
-
     def _compute_block_logits(
         self,
         seq: torch.LongTensor,
@@ -1584,18 +1128,6 @@ class DreamGenerationMixin:
             block_logits = logits[:, clean_idx:clean_idx + block_size]
         # shift for sampling
         return torch.cat([block_logits[:, :1], block_logits[:, :-1]], dim=1)
-
-
-    def _sample_block_diffusion_v3(
-        self,
-        x: torch.LongTensor,
-        attention_mask,
-        tok_idx,
-        generation_config,
-        generation_tokens_hook_func,
-        generation_logits_hook_func,
-        histories
-    ) -> torch.LongTensor:
         """
         Sliding-window and blockwise diffusion with EOS-clamp after each iteration.
         """

@@ -787,7 +787,8 @@ def assisted_block_diffusion_generate(
 
         # Start timing for this step
         # compute sliding window start index with left and right window sizes
-        sliding_window_start = max(0, last_non_mask - left_window_size)
+        # sliding_window_start = max(0, last_non_mask - left_window_size)
+        sliding_window_start = max(prompt_len, last_non_mask - left_window_size)
         sliding_window_end = min(max_len, last_non_mask + right_window_size)
         
         # Dream forward (draft) with block caching
