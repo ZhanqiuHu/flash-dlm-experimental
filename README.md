@@ -1,3 +1,5 @@
+
+
 # FlashDLM: dLLM Acceleration with Guided Parallel Decoding and KV Caching
 
 [![arXiv](https://img.shields.io/badge/arXiv-2505.21467v2-b31b1b.svg)](https://arxiv.org/abs/2505.21467v2)
@@ -9,7 +11,7 @@ FlashDLM: Accelerating Diffusion Language Model Inference via Efficient KV Cachi
 
 FlashDLM implements guided diffusion for accelerating diffusion language model inference, as described in our paper ["FlashDLM: Accelerating Diffusion Language Model Inference via Efficient KV Caching and Guided Diffusion"](https://arxiv.org/abs/2505.21467v2).
 
-FlashDLM achieves an average of **12.14x** end-to-end speedup on Dream-7B-Intrsuct model across various tasks with no or minimal accuracy loss.
+FlashDLM achieves an average of **12.14x** end-to-end speedup on Dream-7B-Instruct model across various tasks with no or minimal accuracy loss.
 
 **Note: This is experimental research code under development.**
 
@@ -83,7 +85,7 @@ If you use this work, please cite our paper:
 @article{hu2025accelerating,
   title={FlashDLM: Accelerating Diffusion Language Model Inference via Efficient KV Caching and Guided Diffusion},
   author={Hu, Zhanqiu and Meng, Jian and Akhauri, Yash and Abdelfattah, Mohamed S. and Seo, Jae-sun and Zhang, Zhiru and Gupta, Udit},
-  journal={arXiv preprint arXiv:2505.21467v2},
+  journal={arXiv preprint arXiv-2505.21467v2},
   year={2025},
   url={https://arxiv.org/abs/2505.21467v2}
 }
